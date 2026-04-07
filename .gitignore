@@ -1,0 +1,48 @@
+# Git ignore for OpenClaw workspace
+*.mp3
+*.jpg
+*.png
+*.jpeg
+*.gif
+*.webp
+*.wav
+*.ogg
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+*.m4a
+*.flac
+
+# Large media folders
+broll/
+*_broll/
+linxi_video/
+
+# Temporary files
+.DS_Store
+*.tmp
+*.temp
+*.log
+
+# OpenClaw specific
+.openclaw/
+auth/
+*.db
+*.sqlite
+*.sqlite3
+
+# Downloaded/processed files
+output/
+n8n-workflows/
+social-media-monitor/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Node modules
+node_modules/
