@@ -664,12 +664,78 @@ const App = {
                     this._updateBulkBar();
                 });
 
+                // Tap to open detail
+                item.addEventListener('click', () => this._openRecordDetail(exp));
+
                 listEl.appendChild(item);
             });
         } catch (e) {
             console.warn('DB not ready for records:', e);
             emptyEl.classList.remove('hidden');
         }
+    },
+
+    _openRecordDetail(exp) {
+        const modal = document.getElementById('record-modal');
+        modal.classList.remove('hidden');
+
+        // Fill form
+        document.getElementById('rec-desc').value = exp.desc || '';
+        document.getElementById('rec-amount').value = exp.amount || '';
+        document.getElementById('rec-currency').value = exp.currency || 'HKD';
+        document.getElementById('rec-date').value = exp.date || '';
+        document.getElementById('rec-payment').value = exp.payment || '現金';
+        document.getElementById('rec-notes').value = exp.notes || '';
+        document.getElementById('rec-status').value = exp.status || 'unclaimed';
+
+        // Show photo if exists
+        const photoArea = document.getElementById('record-photo-area');
+        const photoImg = document.getElementById('record-photo');
+        if (exp.photoBase64) {
+            photoImg.src = exp.photoBase64;
+            photoArea.classList.remove('hidden');
+        } else {
+            photoArea.classList.add('hidden');
+        }
+
+        // Close
+        document.getElementById('record-modal-close').onclick = () => modal.classList.add('hidden');
+
+        // Save
+        document.getElementById('record-save').onclick = () => {
+            try {
+                DB.updateExpense(exp.id, {
+                    desc: document.getElementById('rec-desc').value,
+                    amount: parseFloat(document.getElementById('rec-amount').value) || 0,
+                    currency: document.getElementById('rec-currency').value,
+                    date: document.getElementById('rec-date').value,
+                    payment: document.getElementById('rec-payment').value,
+                    notes: document.getElementById('rec-notes').value,
+                    status: document.getElementById('rec-status').value,
+                    syncedAt: null
+                });
+                try { Sync.push(); } catch(e) {}
+                modal.classList.add('hidden');
+                this._showToast('已更新');
+                this.loadRecords();
+            } catch (e) {
+                this._showToast('更新失敗：' + e.message);
+            }
+        };
+
+        // Delete
+        document.getElementById('record-delete').onclick = () => {
+            if (confirm('確定要刪除呢筆紀錄？')) {
+                try {
+                    DB.deleteExpense(exp.id);
+                    modal.classList.add('hidden');
+                    this._showToast('已刪除');
+                    this.loadRecords();
+                } catch (e) {
+                    this._showToast('刪除失敗');
+                }
+            }
+        };
     },
 
     _updateBulkBar() {

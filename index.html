@@ -449,6 +449,71 @@
     </nav>
 </section>
 
+<!-- Record Detail Modal -->
+<div id="record-modal" class="modal-overlay hidden">
+    <div class="modal-card" style="max-height:90vh;overflow-y:auto;">
+        <div class="modal-header">
+            <h3>紀錄詳情</h3>
+            <button id="record-modal-close" class="modal-close">✕</button>
+        </div>
+        <div id="record-photo-area" class="hidden" style="margin-bottom:12px;">
+            <img id="record-photo" style="width:100%;border-radius:8px;" alt="單據">
+        </div>
+        <div class="expense-form">
+            <div class="form-group">
+                <label for="rec-desc">描述</label>
+                <input type="text" id="rec-desc">
+            </div>
+            <div class="form-row">
+                <div class="form-group flex-1">
+                    <label for="rec-amount">金額</label>
+                    <input type="number" id="rec-amount" step="0.01" inputmode="decimal">
+                </div>
+                <div class="form-group flex-1">
+                    <label for="rec-currency">貨幣</label>
+                    <select id="rec-currency">
+                        <option value="HKD">HKD</option>
+                        <option value="RMB">RMB</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group flex-1">
+                    <label for="rec-date">日期</label>
+                    <input type="date" id="rec-date">
+                </div>
+                <div class="form-group flex-1">
+                    <label for="rec-payment">付款方式</label>
+                    <select id="rec-payment">
+                        <option value="現金">現金</option>
+                        <option value="信用卡">信用卡</option>
+                        <option value="淘寶">淘寶</option>
+                        <option value="拼多多">拼多多</option>
+                        <option value="轉數快">轉數快</option>
+                        <option value="支付寶">支付寶</option>
+                        <option value="其他">其他</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="rec-notes">備注</label>
+                <input type="text" id="rec-notes">
+            </div>
+            <div class="form-group">
+                <label>狀態</label>
+                <select id="rec-status">
+                    <option value="unclaimed">未報銷</option>
+                    <option value="claimed">已報銷</option>
+                </select>
+            </div>
+            <div class="modal-actions" style="margin-top:12px;">
+                <button id="record-delete" class="btn-secondary" style="color:#e94560;">刪除</button>
+                <button id="record-save" class="btn-primary">儲存修改</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- ===================== TOAST ===================== -->
 <div id="toast" class="toast hidden"></div>
 
