@@ -387,6 +387,9 @@ const App = {
                     pill.classList.add('selected');
                     pill.style.borderColor = proj.color || '#e94560';
                     this.selectedProjectColor = proj.color;
+                    // Update header with selected project name
+                    const headerEl = document.getElementById('add-header-title');
+                    if (headerEl) headerEl.textContent = proj.name;
                 }
                 pill.addEventListener('click', () => {
                     this.selectedProject = proj.id;
@@ -397,6 +400,9 @@ const App = {
                     });
                     pill.classList.add('selected');
                     pill.style.borderColor = proj.color || '#e94560';
+                    // Update header with selected project name
+                    const headerEl = document.getElementById('add-header-title');
+                    if (headerEl) headerEl.textContent = proj.name;
                 });
                 container.appendChild(pill);
             });
