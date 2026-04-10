@@ -26,6 +26,12 @@ const App = {
 
     // ─── Init ───────────────────────────────────────────
     init() {
+        // Apply saved theme immediately
+        const savedTheme = localStorage.getItem('ec_theme') || 'dark';
+        if (savedTheme === 'light') {
+            document.documentElement.setAttribute('data-theme', 'light');
+        }
+
         const now = new Date();
         this.dashMonth = { year: now.getFullYear(), month: now.getMonth() };
         this.recMonth  = { year: now.getFullYear(), month: now.getMonth() };
@@ -381,11 +387,12 @@ const App = {
                 const pill = document.createElement('button');
                 pill.className = 'project-pill';
                 pill.textContent = proj.name;
-                pill.style.color = '#ffffff';
-                pill.style.borderColor = this._ensureContrast(proj.color) || '#e94560';
+                const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+                pill.style.color = isLight ? '#333' : '#fff';
+                pill.style.borderColor = isLight ? (proj.color || '#e94560') : (this._ensureContrast(proj.color) || '#e94560');
                 pill.style.borderWidth = '2px';
                 pill.style.borderStyle = 'solid';
-                pill.style.background = 'rgba(255,255,255,0.08)';
+                pill.style.background = isLight ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.08)';
                 if (proj.id === this.selectedProject) {
                     pill.classList.add('selected');
                     pill.style.background = proj.color || '#e94560';
@@ -877,6 +884,24 @@ const App = {
     loadSettings() {
         const user = this._getUser();
         if (user) document.getElementById('settings-username').textContent = user.name;
+
+        // Theme toggle
+        const currentTheme = localStorage.getItem('ec_theme') || 'dark';
+        document.getElementById('theme-toggle').querySelectorAll('.theme-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.theme === currentTheme);
+            btn.addEventListener('click', () => {
+                const theme = btn.dataset.theme;
+                localStorage.setItem('ec_theme', theme);
+                if (theme === 'light') {
+                    document.documentElement.setAttribute('data-theme', 'light');
+                } else {
+                    document.documentElement.removeAttribute('data-theme');
+                }
+                document.getElementById('theme-toggle').querySelectorAll('.theme-btn').forEach(b => {
+                    b.classList.toggle('active', b.dataset.theme === theme);
+                });
+            });
+        });
 
         // Load saved keys
         const geminiKey = localStorage.getItem('ec_gemini_key') || '';
