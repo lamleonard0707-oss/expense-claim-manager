@@ -12,6 +12,7 @@ const COLORS = [
 
 const App = {
     // ─── State ──────────────────────────────────────────
+    deferredInstallPrompt: null,
     currentView: null,
     currentUser: null,
     dashMonth: null,         // { year, month }  (0-indexed month)
@@ -33,6 +34,13 @@ const App = {
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('sw.js').catch(() => {});
         }
+
+        // PWA install prompt
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            this.deferredInstallPrompt = e;
+            this._showInstallBanner();
+        });
 
         // Online/offline indicator
         window.addEventListener('online', () => {
@@ -948,6 +956,37 @@ const App = {
             toast.classList.remove('show');
             setTimeout(() => toast.classList.add('hidden'), 300);
         }, duration);
+    },
+
+    _showInstallBanner() {
+        // Remove existing banner if any
+        const existing = document.getElementById('install-banner');
+        if (existing) existing.remove();
+
+        const banner = document.createElement('div');
+        banner.id = 'install-banner';
+        banner.innerHTML = `
+            <div class="install-banner">
+                <span>📲 安裝到主畫面，用起嚟更方便！</span>
+                <button id="install-btn" class="btn-primary" style="padding:8px 16px;font-size:14px;width:auto;">安裝</button>
+                <button id="install-dismiss" class="btn-icon" style="font-size:16px;">✕</button>
+            </div>
+        `;
+        document.body.appendChild(banner);
+
+        document.getElementById('install-btn').onclick = async () => {
+            if (this.deferredInstallPrompt) {
+                this.deferredInstallPrompt.prompt();
+                const result = await this.deferredInstallPrompt.userChoice;
+                if (result.outcome === 'accepted') {
+                    this._showToast('安裝成功！');
+                }
+                this.deferredInstallPrompt = null;
+            }
+            banner.remove();
+        };
+
+        document.getElementById('install-dismiss').onclick = () => banner.remove();
     },
 
     _esc(str) {
