@@ -1124,3 +1124,18 @@ textarea {
     background: var(--surface2);
     border-radius: 4px;
 }
+
+/* Offline indicator */
+body.offline .app-header::after {
+    content: '📡 離線模式';
+    display: block;
+    background: var(--warning);
+    color: #333;
+    text-align: center;
+    font-size: 11px;
+    padding: 2px;
+    position: absolute;
+    bottom: -18px;
+    left: 0;
+    right: 0;
+}
