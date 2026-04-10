@@ -108,18 +108,53 @@ When adding a new record, check IndexedDB for potential duplicates:
 - Show warning with the suspected duplicate record details
 - User chooses: "Not a duplicate — save anyway" or "Yes duplicate — cancel"
 
-## AI Receipt Recognition (Gemini Flash)
+## AI Smart Assistant (Gemini Flash)
 
-**Input:** Photo of receipt / screenshot (Taobao, FPS confirmation, credit card statement, etc.)
+The AI is not just an OCR tool — it acts as a conversational assistant that helps the user verify and complete each expense entry. It proactively asks clarifying questions when something is unclear, ambiguous, or unusual.
+
+**Input:** Photo of receipt / screenshot (Taobao, FPS confirmation, credit card statement, etc.) or text input.
 
 **Prompt strategy:**
 - Send image to Gemini 2.0 Flash with structured extraction prompt
-- Request JSON output: `{ amount, currency, date, description, confidence }`
-- If confidence < 0.8 on any field → highlight that field for user confirmation
-- If amount not found → ask user to input manually
+- Request JSON output: `{ amount, currency, date, description, confidence, questions[] }`
+- AI returns both extracted data AND any follow-up questions it has
 - Support Chinese (Traditional + Simplified) and English receipts
 
 **API call:** Client-side fetch to `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent`
+
+### AI Clarification Scenarios
+
+**Photo quality issues:**
+- Blurry / glare / cropped → "張相有啲唔清楚，我睇到 $4X，係咪 $46？"
+- Cannot find amount → "我搵唔到金額，可唔可以打返個數？"
+
+**Multi-item receipts:**
+- Multiple items on one receipt → "呢張單有 3 件嘢共 $138，你想逐件分開入定合埋一筆？"
+- Receipt has discount / shipping → "原價 $100，折後 $78，運費 $12，你想入 $78 定 $90（連運費）？"
+
+**Currency detection:**
+- Taobao/Pinduoduo screenshot → Auto-suggest RMB: "呢張淘寶單應該係人民幣 ¥46，唔係港紙，啱唔啱？"
+- Ambiguous currency → "呢張單冇寫明貨幣，係港紙定人民幣？"
+
+**Date anomalies:**
+- Date far from today → "呢張單日期係 3月15號，係咪之前漏咗入？"
+- No date on receipt → "張單冇日期，用今日 4月11號得唔得？"
+
+**Abnormal amounts:**
+- Unusually large for the project → "呢筆 $4,600 比平時呢個項目大好多，確認啱嘅？要唔要即 claim？"
+
+**Smart suggestions (learning from history):**
+- Recognizes store name → Auto-suggest project: "五金鋪雜項你之前都係入 Partyland MK，今次都係？"
+- Recognizes platform → Auto-fill payment method: Taobao screenshot → payment method = 淘寶, currency = RMB
+- Frequent merchant → Pre-fill description based on past entries
+
+### AI Conversation UI
+
+- After AI extraction, results shown in a chat-like interface (not just a form)
+- AI message: "我睇到呢張單係..." with extracted details
+- If AI has questions: shown as follow-up bubbles the user can tap to answer
+- User can correct any field by tapping on it
+- Once all fields confirmed → "OK！已經入好喇 ✓" → save
 
 ## Google Sheets Integration
 
