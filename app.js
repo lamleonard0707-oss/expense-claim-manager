@@ -1064,5 +1064,12 @@ const App = {
     }
 };
 
+// Force update: if ?clear=1 in URL, unregister SW and clear caches
+if (location.search.includes('clear=1')) {
+    caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k))));
+    navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
+    location.replace(location.pathname);
+}
+
 // Boot
 document.addEventListener('DOMContentLoaded', () => App.init());
