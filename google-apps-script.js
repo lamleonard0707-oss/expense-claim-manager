@@ -251,7 +251,15 @@ function rebuildSubtotals(sheet) {
 
 function uploadPhoto(base64Data, record) {
     try {
-        var folder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
+        var rootFolder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
+
+        // Create project subfolder if not exists
+        var projectName = record.project || '未分類';
+        var projectFolder = getOrCreateSubfolder(rootFolder, projectName);
+
+        // Create month subfolder under project (e.g. "2026-04")
+        var monthStr = record.paymentDate ? record.paymentDate.substring(0, 7) : getMonthTab();
+        var monthFolder = getOrCreateSubfolder(projectFolder, monthStr);
 
         // Strip data URL prefix if present
         var imageData = base64Data;
@@ -265,7 +273,7 @@ function uploadPhoto(base64Data, record) {
             buildPhotoFilename(record)
         );
 
-        var file = folder.createFile(blob);
+        var file = monthFolder.createFile(blob);
         file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
 
         return file.getUrl();
@@ -273,6 +281,14 @@ function uploadPhoto(base64Data, record) {
         Logger.log('Photo upload failed: ' + err.toString());
         return '';
     }
+}
+
+function getOrCreateSubfolder(parentFolder, folderName) {
+    var folders = parentFolder.getFoldersByName(folderName);
+    if (folders.hasNext()) {
+        return folders.next();
+    }
+    return parentFolder.createFolder(folderName);
 }
 
 function buildPhotoFilename(record) {
