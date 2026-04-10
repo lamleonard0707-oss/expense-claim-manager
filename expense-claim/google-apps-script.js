@@ -1,0 +1,319 @@
+// ============================================================
+// Expense Claim Manager — Google Apps Script
+// Deploy as Web App: Execute as Me, Anyone can access
+// ============================================================
+
+var SPREADSHEET_ID = 'YOUR_SPREADSHEET_ID_HERE';  // Fill in your Google Sheets ID
+var DRIVE_FOLDER_ID = 'YOUR_DRIVE_FOLDER_ID_HERE'; // Fill in your Google Drive folder ID
+
+var HEADERS = [
+    'ID', '日期', '項目', '描述', '金額', '貨幣',
+    '付款方式', '付款人', '狀態', 'Claim日期', '單據', '建立時間'
+];
+
+// ============================================================
+// Entry Point
+// ============================================================
+
+function doPost(e) {
+    try {
+        var data = JSON.parse(e.postData.contents);
+        var action = data.action;
+
+        if (action === 'addRecord') {
+            var result = addRecord(data.record, data.photo);
+            return ContentService
+                .createTextOutput(JSON.stringify(result))
+                .setMimeType(ContentService.MimeType.JSON);
+        }
+
+        return ContentService
+            .createTextOutput(JSON.stringify({ success: false, error: 'Unknown action' }))
+            .setMimeType(ContentService.MimeType.JSON);
+
+    } catch (err) {
+        return ContentService
+            .createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
+            .setMimeType(ContentService.MimeType.JSON);
+    }
+}
+
+// ============================================================
+// Add Record
+// ============================================================
+
+function addRecord(record, photoBase64) {
+    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+
+    // Determine tab name from paymentDate (e.g. "2026-04")
+    var tabName = record.paymentDate ? record.paymentDate.substring(0, 7) : getMonthTab();
+    var sheet = getOrCreateSheet(ss, tabName);
+
+    // Upload photo to Drive if provided
+    var photoLink = '';
+    if (photoBase64) {
+        photoLink = uploadPhoto(photoBase64, record);
+    }
+
+    // Find insertion row — before subtotal/grand total rows at bottom
+    var lastDataRow = findLastDataRow(sheet);
+    var insertRow = lastDataRow + 1;
+
+    sheet.insertRowBefore(insertRow);
+
+    var row = [
+        record.id,
+        record.paymentDate,
+        record.project,
+        record.description,
+        record.amount,
+        record.currency,
+        record.paymentMethod,
+        record.paidBy,
+        record.claimStatus,
+        record.claimDate,
+        photoLink,
+        record.createdAt
+    ];
+
+    var range = sheet.getRange(insertRow, 1, 1, row.length);
+    range.setValues([row]);
+
+    // Format amount column (E) as number
+    sheet.getRange(insertRow, 5).setNumberFormat('#,##0.00');
+
+    // Rebuild subtotals
+    rebuildSubtotals(sheet);
+
+    return { success: true, row: insertRow, tab: tabName };
+}
+
+// ============================================================
+// Sheet Helpers
+// ============================================================
+
+function getMonthTab() {
+    var now = new Date();
+    var y = now.getFullYear();
+    var m = String(now.getMonth() + 1).padStart(2, '0');
+    return y + '-' + m;
+}
+
+function getOrCreateSheet(ss, tabName) {
+    var sheet = ss.getSheetByName(tabName);
+    if (!sheet) {
+        sheet = ss.insertSheet(tabName);
+        setupSheetHeaders(sheet);
+    }
+    return sheet;
+}
+
+function setupSheetHeaders(sheet) {
+    var headerRange = sheet.getRange(1, 1, 1, HEADERS.length);
+    headerRange.setValues([HEADERS]);
+
+    // Style headers
+    headerRange.setBackground('#4A90D9');
+    headerRange.setFontColor('#FFFFFF');
+    headerRange.setFontWeight('bold');
+    headerRange.setHorizontalAlignment('center');
+
+    // Freeze header row
+    sheet.setFrozenRows(1);
+
+    // Set column widths
+    sheet.setColumnWidth(1, 80);   // ID
+    sheet.setColumnWidth(2, 100);  // 日期
+    sheet.setColumnWidth(3, 120);  // 項目
+    sheet.setColumnWidth(4, 200);  // 描述
+    sheet.setColumnWidth(5, 80);   // 金額
+    sheet.setColumnWidth(6, 60);   // 貨幣
+    sheet.setColumnWidth(7, 100);  // 付款方式
+    sheet.setColumnWidth(8, 80);   // 付款人
+    sheet.setColumnWidth(9, 80);   // 狀態
+    sheet.setColumnWidth(10, 100); // Claim日期
+    sheet.setColumnWidth(11, 80);  // 單據
+    sheet.setColumnWidth(12, 160); // 建立時間
+}
+
+// Find last row with actual expense data (exclude header, subtotals, grand total)
+function findLastDataRow(sheet) {
+    var lastRow = sheet.getLastRow();
+    if (lastRow <= 1) return 1; // Only header or empty
+
+    // Walk backwards to find last non-summary row
+    for (var r = lastRow; r >= 2; r--) {
+        var cellA = sheet.getRange(r, 1).getValue();
+        var cellC = sheet.getRange(r, 3).getValue();
+        // Subtotal/grand total rows have no ID and have specific markers in col C
+        if (cellA !== '' && cellA !== '小計' && cellA !== '總計') {
+            return r;
+        }
+        if (cellA === '' && cellC === '') {
+            continue; // blank spacer row, skip
+        }
+    }
+    return 1;
+}
+
+// ============================================================
+// Subtotals per Project + Grand Total
+// ============================================================
+
+function rebuildSubtotals(sheet) {
+    var lastRow = sheet.getLastRow();
+
+    // Remove existing subtotal/grand total rows (find them first)
+    var rowsToDelete = [];
+    for (var r = lastRow; r >= 2; r--) {
+        var cellA = sheet.getRange(r, 1).getValue();
+        if (cellA === '小計' || cellA === '總計' || cellA === '') {
+            rowsToDelete.push(r);
+        } else {
+            break; // Stop at first real data row
+        }
+    }
+    // Delete from bottom up
+    for (var i = 0; i < rowsToDelete.length; i++) {
+        sheet.deleteRow(rowsToDelete[i]);
+    }
+
+    // Re-read data rows after deletion
+    var dataLastRow = sheet.getLastRow();
+    if (dataLastRow < 2) return;
+
+    var data = sheet.getRange(2, 1, dataLastRow - 1, HEADERS.length).getValues();
+
+    // Group amounts by project
+    var projectTotals = {};
+    var projectOrder = [];
+    data.forEach(function(row) {
+        var id = row[0];
+        var project = row[2];
+        var amount = parseFloat(row[4]) || 0;
+        var currency = row[5] || 'HKD';
+
+        if (!id || id === '小計' || id === '總計') return;
+
+        var key = project + '|' + currency;
+        if (!projectTotals[key]) {
+            projectTotals[key] = { project: project, currency: currency, total: 0 };
+            projectOrder.push(key);
+        }
+        projectTotals[key].total += amount;
+    });
+
+    // Append spacer row
+    var nextRow = sheet.getLastRow() + 1;
+    sheet.getRange(nextRow, 1, 1, HEADERS.length).setValues([new Array(HEADERS.length).fill('')]);
+    nextRow++;
+
+    // Append subtotal rows per project
+    var grandTotals = {};
+    projectOrder.forEach(function(key) {
+        var pt = projectTotals[key];
+        var subtotalRow = new Array(HEADERS.length).fill('');
+        subtotalRow[0] = '小計';
+        subtotalRow[2] = pt.project;
+        subtotalRow[4] = pt.total;
+        subtotalRow[5] = pt.currency;
+
+        var range = sheet.getRange(nextRow, 1, 1, HEADERS.length);
+        range.setValues([subtotalRow]);
+        range.setBackground('#E8F4FD');
+        range.setFontWeight('bold');
+        sheet.getRange(nextRow, 5).setNumberFormat('#,##0.00');
+
+        grandTotals[pt.currency] = (grandTotals[pt.currency] || 0) + pt.total;
+        nextRow++;
+    });
+
+    // Append grand total rows per currency
+    Object.keys(grandTotals).forEach(function(currency) {
+        var grandRow = new Array(HEADERS.length).fill('');
+        grandRow[0] = '總計';
+        grandRow[4] = grandTotals[currency];
+        grandRow[5] = currency;
+
+        var range = sheet.getRange(nextRow, 1, 1, HEADERS.length);
+        range.setValues([grandRow]);
+        range.setBackground('#2E75B6');
+        range.setFontColor('#FFFFFF');
+        range.setFontWeight('bold');
+        sheet.getRange(nextRow, 5).setNumberFormat('#,##0.00');
+        nextRow++;
+    });
+}
+
+// ============================================================
+// Google Drive Photo Upload
+// ============================================================
+
+function uploadPhoto(base64Data, record) {
+    try {
+        var folder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
+
+        // Strip data URL prefix if present
+        var imageData = base64Data;
+        if (base64Data.indexOf(',') !== -1) {
+            imageData = base64Data.split(',')[1];
+        }
+
+        var blob = Utilities.newBlob(
+            Utilities.base64Decode(imageData),
+            'image/jpeg',
+            buildPhotoFilename(record)
+        );
+
+        var file = folder.createFile(blob);
+        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+        return file.getUrl();
+    } catch (err) {
+        Logger.log('Photo upload failed: ' + err.toString());
+        return '';
+    }
+}
+
+function buildPhotoFilename(record) {
+    // Format: {date}_{project}_{amount}_{currency}.jpg
+    var date = (record.paymentDate || 'unknown').replace(/-/g, '');
+    var project = (record.project || 'unknown').replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, '_');
+    var amount = record.amount || '0';
+    var currency = record.currency || 'HKD';
+    return date + '_' + project + '_' + amount + '_' + currency + '.jpg';
+}
+
+// ============================================================
+// Test Function (run in Apps Script editor to verify)
+// ============================================================
+
+function testDoPost() {
+    var testPayload = {
+        action: 'addRecord',
+        record: {
+            id: 'test-001',
+            project: '測試項目',
+            amount: 250.00,
+            currency: 'HKD',
+            description: '午餐工作餐',
+            paymentDate: '2026-04-10',
+            paymentMethod: '八達通',
+            paidBy: 'Leonard',
+            claimStatus: 'pending',
+            claimDate: '',
+            notes: '測試記錄',
+            createdAt: new Date().toISOString()
+        },
+        photo: null
+    };
+
+    var fakeEvent = {
+        postData: {
+            contents: JSON.stringify(testPayload)
+        }
+    };
+
+    var result = doPost(fakeEvent);
+    Logger.log(result.getContent());
+}
