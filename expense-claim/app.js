@@ -34,6 +34,14 @@ const App = {
             navigator.serviceWorker.register('sw.js').catch(() => {});
         }
 
+        // Online/offline indicator
+        window.addEventListener('online', () => {
+            document.body.classList.remove('offline');
+            try { Sync.push(); } catch(e) {}
+        });
+        window.addEventListener('offline', () => document.body.classList.add('offline'));
+        if (!navigator.onLine) document.body.classList.add('offline');
+
         // Check if first launch
         const user = this._getUser();
         if (!user) {
@@ -119,6 +127,7 @@ const App = {
 
             // Init default projects then enter dashboard
             this.initDefaultProjects();
+            this.startReminderCheck();
             this.showView('dashboard');
         });
     },
@@ -134,6 +143,7 @@ const App = {
         const tryUnlock = () => {
             errEl.classList.add('hidden');
             if (passEl.value === user.passcode) {
+                this.startReminderCheck();
                 this.showView('dashboard');
             } else {
                 passEl.value = '';
@@ -146,6 +156,44 @@ const App = {
         passEl.addEventListener('keydown', e => { if (e.key === 'Enter') tryUnlock(); });
         passEl.addEventListener('input', () => { if (passEl.value.length === 4) tryUnlock(); });
         setTimeout(() => passEl.focus(), 100);
+    },
+
+    // ─── Daily Reminder ─────────────────────────────────
+    startReminderCheck() {
+        if (this._reminderStarted) return;
+        this._reminderStarted = true;
+
+        // Request notification permission
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+
+        const checkReminder = () => {
+            const reminderHour = parseInt(localStorage.getItem('ec_reminder_hour') || '21');
+            const now = new Date();
+            if (now.getHours() !== reminderHour) return;
+
+            const today = now.toISOString().split('T')[0];
+            const lastReminder = localStorage.getItem('ec_last_reminder');
+            if (lastReminder === today) return;
+
+            // Check if user already added a record today
+            try {
+                const expenses = DB.getExpensesByMonth(now.getFullYear(), now.getMonth());
+                if (expenses.some(e => e.date === today)) return;
+            } catch (e) { return; }
+
+            if ('Notification' in window && Notification.permission === 'granted') {
+                new Notification('報銷管理提醒', {
+                    body: '今日報咗 claim 未呀？📝',
+                    icon: 'icon-192.png'
+                });
+                localStorage.setItem('ec_last_reminder', today);
+            }
+        };
+
+        setInterval(checkReminder, 60000);
+        checkReminder();
     },
 
     initDefaultProjects() {
@@ -770,6 +818,14 @@ const App = {
             localStorage.setItem('ec_script_url', url);
             this._showToast('Apps Script URL 已儲存');
             try { Sync.setUrl(url); } catch(e) {}
+        };
+
+        // Reminder hour
+        const reminderHourEl = document.getElementById('settings-reminder-hour');
+        reminderHourEl.value = localStorage.getItem('ec_reminder_hour') || '21';
+        reminderHourEl.onchange = () => {
+            localStorage.setItem('ec_reminder_hour', reminderHourEl.value);
+            this._showToast(`提醒時間已改為 ${reminderHourEl.value}:00`);
         };
 
         // Change passcode
