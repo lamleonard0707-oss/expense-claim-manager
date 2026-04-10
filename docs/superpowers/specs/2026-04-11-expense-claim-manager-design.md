@@ -224,6 +224,14 @@ Fixed list (can be extended in settings):
 - Alipay (支付寶)
 - Other (其他)
 
+## Daily Reminder
+
+- PWA notification (via Service Worker + Notification API) to remind user to log expenses
+- Default reminder time: 9pm daily (configurable in Settings)
+- Message examples: "今日報咗 claim 未呀？📝" / "今日有冇新嘅單據要入？"
+- If user already added a record today → skip reminder
+- Uses `setInterval` check + Notification API (no server needed)
+
 ## Offline Support
 
 - Service worker caches app shell
