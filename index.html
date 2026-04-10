@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#e94560">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>報銷管理</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ===================== SETUP VIEW ===================== -->
+<section id="setup-view" class="view">
+    <div class="setup-container">
+        <div class="setup-logo">
+            <div class="setup-icon">💼</div>
+            <h1>報銷管理</h1>
+            <p class="setup-subtitle">Expense Claim Manager</p>
+        </div>
+        <div class="setup-card">
+            <h2>初次設定</h2>
+            <div class="form-group">
+                <label for="setup-name">你的名字</label>
+                <input type="text" id="setup-name" placeholder="例：陳大文" autocomplete="name">
+            </div>
+            <div class="form-group">
+                <label for="setup-passcode">設定4位密碼</label>
+                <input type="password" id="setup-passcode" placeholder="4位數字" maxlength="4" inputmode="numeric" pattern="[0-9]*">
+            </div>
+            <div class="form-group">
+                <label for="setup-passcode-confirm">確認密碼</label>
+                <input type="password" id="setup-passcode-confirm" placeholder="再輸入一次" maxlength="4" inputmode="numeric" pattern="[0-9]*">
+            </div>
+            <p id="setup-error" class="error-msg hidden"></p>
+            <button id="setup-submit" class="btn-primary btn-full">開始使用</button>
+        </div>
+    </div>
+</section>
+
+<!-- ===================== LOCK VIEW ===================== -->
+<section id="lock-view" class="view hidden">
+    <div class="setup-container">
+        <div class="setup-logo">
+            <div class="setup-icon">🔒</div>
+            <h1>報銷管理</h1>
+        </div>
+        <div class="setup-card">
+            <h2 id="lock-user-name">歡迎回來</h2>
+            <div class="form-group">
+                <label for="lock-passcode">輸入密碼</label>
+                <input type="password" id="lock-passcode" placeholder="4位數字" maxlength="4" inputmode="numeric" pattern="[0-9]*" autofocus>
+            </div>
+            <p id="lock-error" class="error-msg hidden"></p>
+            <button id="lock-submit" class="btn-primary btn-full">解鎖</button>
+        </div>
+    </div>
+</section>
+
+<!-- ===================== DASHBOARD VIEW ===================== -->
+<section id="dashboard-view" class="view hidden">
+    <header class="app-header">
+        <div class="header-month-nav">
+            <button id="dash-prev-month" class="month-nav-btn">&#8249;</button>
+            <span id="dash-month-label" class="month-label">2026年4月</span>
+            <button id="dash-next-month" class="month-nav-btn">&#8250;</button>
+        </div>
+        <div class="header-user" id="dash-user-name"></div>
+    </header>
+
+    <main class="dashboard-main">
+        <div class="summary-bar">
+            <div class="summary-item">
+                <span class="summary-label">未報銷</span>
+                <span id="dash-unclaimed-total" class="summary-value accent">HK$0</span>
+            </div>
+            <div class="summary-divider"></div>
+            <div class="summary-item">
+                <span class="summary-label">已報銷</span>
+                <span id="dash-claimed-total" class="summary-value success">HK$0</span>
+            </div>
+            <div class="summary-divider"></div>
+            <div class="summary-item">
+                <span class="summary-label">總計</span>
+                <span id="dash-month-total" class="summary-value">HK$0</span>
+            </div>
+        </div>
+
+        <div id="dash-project-cards" class="project-cards">
+            <!-- Project cards injected by app.js -->
+        </div>
+
+        <div id="dash-empty" class="empty-state hidden">
+            <div class="empty-icon">📋</div>
+            <p>今個月未有記錄</p>
+            <p class="text-dim">點擊 + 新增第一筆報銷</p>
+        </div>
+    </main>
+
+    <button id="fab-add" class="fab" title="新增報銷">+</button>
+
+    <nav class="bottom-nav">
+        <button class="nav-btn active" data-view="dashboard">
+            <span class="nav-icon">🏠</span>
+            <span class="nav-label">主頁</span>
+        </button>
+        <button class="nav-btn" data-view="records">
+            <span class="nav-icon">📄</span>
+            <span class="nav-label">記錄</span>
+        </button>
+        <button class="nav-btn" data-view="projects">
+            <span class="nav-icon">📁</span>
+            <span class="nav-label">項目</span>
+        </button>
+        <button class="nav-btn" data-view="settings">
+            <span class="nav-icon">⚙️</span>
+            <span class="nav-label">設定</span>
+        </button>
+    </nav>
+</section>
+
+<!-- ===================== ADD EXPENSE VIEW ===================== -->
+<section id="add-view" class="view hidden">
+    <header class="app-header">
+        <button class="back-btn" data-back="dashboard">&#8592;</button>
+        <h2>新增報銷</h2>
+        <div></div>
+    </header>
+
+    <main class="add-main">
+        <!-- Project Selector -->
+        <div class="section-block">
+            <label class="section-label">選擇項目</label>
+            <div id="add-project-pills" class="project-pills">
+                <!-- Pills injected by app.js -->
+            </div>
+        </div>
+
+        <!-- Input Toggle -->
+        <div class="section-block">
+            <div class="input-toggle">
+                <button id="toggle-photo" class="toggle-btn active" data-mode="photo">
+                    📷 拍照 / 上傳
+                </button>
+                <button id="toggle-text" class="toggle-btn" data-mode="text">
+                    ✏️ 文字描述
+                </button>
+            </div>
+        </div>
+
+        <!-- Photo Input Area -->
+        <div id="photo-input-area" class="section-block">
+            <label class="upload-area" for="photo-input" id="upload-label">
+                <div class="upload-placeholder" id="upload-placeholder">
+                    <div class="upload-icon">📷</div>
+                    <p>點擊上傳收據照片</p>
+                    <p class="text-dim">支援 JPG / PNG</p>
+                </div>
+                <img id="photo-preview" class="photo-preview hidden" alt="收據預覽">
+            </label>
+            <input type="file" id="photo-input" accept="image/*" capture="environment" class="hidden">
+            <button id="photo-analyze-btn" class="btn-secondary btn-full hidden">🤖 AI 分析收據</button>
+        </div>
+
+        <!-- Text Input Area -->
+        <div id="text-input-area" class="section-block hidden">
+            <textarea id="text-input" class="text-input" placeholder="描述你的消費，例：Partyland MK 買咗兩箱飲品，共 $320..." rows="4"></textarea>
+            <button id="text-analyze-btn" class="btn-secondary btn-full">🤖 AI 分析</button>
+        </div>
+
+        <!-- AI Chat Area -->
+        <div id="ai-chat-area" class="section-block hidden">
+            <div class="ai-chat-header">
+                <span class="ai-badge">🤖 AI</span>
+                <span>分析結果</span>
+            </div>
+            <div id="ai-chat-messages" class="ai-chat-messages">
+                <!-- Messages injected by app.js -->
+            </div>
+            <div id="ai-options" class="ai-options hidden">
+                <!-- Option buttons injected by app.js -->
+            </div>
+        </div>
+
+        <!-- Expense Form -->
+        <div class="section-block">
+            <div class="expense-form">
+                <div class="form-group">
+                    <label for="exp-desc">描述</label>
+                    <input type="text" id="exp-desc" placeholder="消費項目描述">
+                </div>
+                <div class="form-row">
+                    <div class="form-group flex-1">
+                        <label for="exp-amount">金額</label>
+                        <input type="number" id="exp-amount" placeholder="0.00" step="0.01" min="0" inputmode="decimal">
+                    </div>
+                    <div class="form-group flex-1">
+                        <label for="exp-currency">貨幣</label>
+                        <select id="exp-currency">
+                            <option value="HKD">HKD 港幣</option>
+                            <option value="RMB">RMB 人民幣</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group flex-1">
+                        <label for="exp-date">日期</label>
+                        <input type="date" id="exp-date">
+                    </div>
+                    <div class="form-group flex-1">
+                        <label for="exp-payment">付款方式</label>
+                        <select id="exp-payment">
+                            <option value="現金">現金</option>
+                            <option value="信用卡">信用卡</option>
+                            <option value="淘寶">淘寶</option>
+                            <option value="拼多多">拼多多</option>
+                            <option value="轉數快">轉數快</option>
+                            <option value="支付寶">支付寶</option>
+                            <option value="其他">其他</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="exp-notes">備注（可選）</label>
+                    <input type="text" id="exp-notes" placeholder="額外備注">
+                </div>
+                <p id="add-error" class="error-msg hidden"></p>
+                <button id="save-expense-btn" class="btn-primary btn-full">💾 儲存報銷</button>
+            </div>
+        </div>
+    </main>
+</section>
+
+<!-- ===================== RECORDS VIEW ===================== -->
+<section id="records-view" class="view hidden">
+    <header class="app-header">
+        <div class="header-month-nav">
+            <button id="rec-prev-month" class="month-nav-btn">&#8249;</button>
+            <span id="rec-month-label" class="month-label">2026年4月</span>
+            <button id="rec-next-month" class="month-nav-btn">&#8250;</button>
+        </div>
+        <div></div>
+    </header>
+
+    <div class="records-filters">
+        <select id="rec-filter-project" class="filter-select">
+            <option value="">全部項目</option>
+        </select>
+        <select id="rec-filter-status" class="filter-select">
+            <option value="">全部狀態</option>
+            <option value="unclaimed">未報銷</option>
+            <option value="claimed">已報銷</option>
+        </select>
+    </div>
+
+    <main class="records-main">
+        <div id="records-list" class="records-list">
+            <!-- Records injected by app.js -->
+        </div>
+        <div id="records-empty" class="empty-state hidden">
+            <div class="empty-icon">📭</div>
+            <p>沒有記錄</p>
+        </div>
+    </main>
+
+    <div id="bulk-claim-bar" class="bulk-claim-bar hidden">
+        <span id="bulk-count">已選 0 項</span>
+        <button id="bulk-claim-btn" class="btn-primary">✅ 標記為已報銷</button>
+    </div>
+
+    <nav class="bottom-nav">
+        <button class="nav-btn" data-view="dashboard">
+            <span class="nav-icon">🏠</span>
+            <span class="nav-label">主頁</span>
+        </button>
+        <button class="nav-btn active" data-view="records">
+            <span class="nav-icon">📄</span>
+            <span class="nav-label">記錄</span>
+        </button>
+        <button class="nav-btn" data-view="projects">
+            <span class="nav-icon">📁</span>
+            <span class="nav-label">項目</span>
+        </button>
+        <button class="nav-btn" data-view="settings">
+            <span class="nav-icon">⚙️</span>
+            <span class="nav-label">設定</span>
+        </button>
+    </nav>
+</section>
+
+<!-- ===================== PROJECTS VIEW ===================== -->
+<section id="projects-view" class="view hidden">
+    <header class="app-header">
+        <h2>項目管理</h2>
+        <button id="add-project-btn" class="header-action-btn">+ 新增</button>
+    </header>
+
+    <main class="projects-main">
+        <div id="projects-list" class="projects-list">
+            <!-- Projects injected by app.js -->
+        </div>
+        <div id="projects-empty" class="empty-state hidden">
+            <div class="empty-icon">📁</div>
+            <p>未有項目</p>
+        </div>
+    </main>
+
+    <nav class="bottom-nav">
+        <button class="nav-btn" data-view="dashboard">
+            <span class="nav-icon">🏠</span>
+            <span class="nav-label">主頁</span>
+        </button>
+        <button class="nav-btn" data-view="records">
+            <span class="nav-icon">📄</span>
+            <span class="nav-label">記錄</span>
+        </button>
+        <button class="nav-btn active" data-view="projects">
+            <span class="nav-icon">📁</span>
+            <span class="nav-label">項目</span>
+        </button>
+        <button class="nav-btn" data-view="settings">
+            <span class="nav-icon">⚙️</span>
+            <span class="nav-label">設定</span>
+        </button>
+    </nav>
+</section>
+
+<!-- Project Modal -->
+<div id="project-modal" class="modal-overlay hidden">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3 id="project-modal-title">新增項目</h3>
+            <button id="project-modal-close" class="modal-close">✕</button>
+        </div>
+        <div class="form-group">
+            <label for="project-name-input">項目名稱</label>
+            <input type="text" id="project-name-input" placeholder="例：Partyland MK">
+        </div>
+        <div class="form-group">
+            <label>顏色</label>
+            <div id="color-picker" class="color-picker">
+                <!-- Color circles injected by app.js -->
+            </div>
+        </div>
+        <p id="project-modal-error" class="error-msg hidden"></p>
+        <div class="modal-actions">
+            <button id="project-modal-cancel" class="btn-secondary">取消</button>
+            <button id="project-modal-save" class="btn-primary">儲存</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===================== SETTINGS VIEW ===================== -->
+<section id="settings-view" class="view hidden">
+    <header class="app-header">
+        <h2>設定</h2>
+        <div></div>
+    </header>
+
+    <main class="settings-main">
+        <div class="settings-section">
+            <h3 class="settings-section-title">帳戶</h3>
+            <div class="settings-item">
+                <span class="settings-label">用戶名字</span>
+                <span id="settings-username" class="settings-value"></span>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <h3 class="settings-section-title">AI 設定</h3>
+            <div class="settings-item-block">
+                <label for="settings-gemini-key">Gemini API Key</label>
+                <div class="settings-input-row">
+                    <input type="password" id="settings-gemini-key" placeholder="AIza...">
+                    <button id="settings-gemini-toggle" class="icon-btn">👁</button>
+                </div>
+                <button id="settings-gemini-save" class="btn-secondary btn-sm">儲存</button>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <h3 class="settings-section-title">同步設定</h3>
+            <div class="settings-item-block">
+                <label for="settings-script-url">Google Apps Script URL</label>
+                <input type="url" id="settings-script-url" placeholder="https://script.google.com/...">
+                <button id="settings-script-save" class="btn-secondary btn-sm">儲存</button>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <h3 class="settings-section-title">提醒</h3>
+            <div class="settings-item-block">
+                <label for="settings-reminder-hour">每日提醒時間</label>
+                <select id="settings-reminder-hour">
+                    <option value="18">18:00</option>
+                    <option value="19">19:00</option>
+                    <option value="20">20:00</option>
+                    <option value="21" selected>21:00</option>
+                    <option value="22">22:00</option>
+                    <option value="23">23:00</option>
+                </select>
+                <p class="text-dim" style="margin-top:4px;font-size:12px;">如果當日未入過數會提醒你</p>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <h3 class="settings-section-title">安全</h3>
+            <div class="settings-item-block">
+                <label>更改密碼</label>
+                <input type="password" id="settings-old-passcode" placeholder="現有密碼" maxlength="4" inputmode="numeric" class="mb-8">
+                <input type="password" id="settings-new-passcode" placeholder="新密碼（4位）" maxlength="4" inputmode="numeric" class="mb-8">
+                <input type="password" id="settings-new-passcode-confirm" placeholder="確認新密碼" maxlength="4" inputmode="numeric" class="mb-8">
+                <p id="settings-passcode-error" class="error-msg hidden"></p>
+                <button id="settings-passcode-save" class="btn-secondary btn-sm">更改密碼</button>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <div class="settings-item" id="settings-logout" style="cursor:pointer;">
+                <span class="settings-label accent">登出 / 清除數據</span>
+                <span class="settings-arrow">›</span>
+            </div>
+        </div>
+
+        <div class="settings-footer">
+            <p class="text-dim">Expense Claim Manager v1.0</p>
+        </div>
+    </main>
+
+    <nav class="bottom-nav">
+        <button class="nav-btn" data-view="dashboard">
+            <span class="nav-icon">🏠</span>
+            <span class="nav-label">主頁</span>
+        </button>
+        <button class="nav-btn" data-view="records">
+            <span class="nav-icon">📄</span>
+            <span class="nav-label">記錄</span>
+        </button>
+        <button class="nav-btn" data-view="projects">
+            <span class="nav-icon">📁</span>
+            <span class="nav-label">項目</span>
+        </button>
+        <button class="nav-btn active" data-view="settings">
+            <span class="nav-icon">⚙️</span>
+            <span class="nav-label">設定</span>
+        </button>
+    </nav>
+</section>
+
+<!-- ===================== TOAST ===================== -->
+<div id="toast" class="toast hidden"></div>
+
+<script src="db.js"></script>
+<script src="ai.js"></script>
+<script src="sync.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
