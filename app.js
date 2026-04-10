@@ -274,7 +274,7 @@ const App = {
                         <span class="project-card-meta">${projExpenses.length} 筆 · ${unclaimed.length} 未報銷</span>
                     </div>
                     <div class="project-card-right">
-                        <div class="project-card-amount" style="color:${proj.color || '#e94560'}">
+                        <div class="project-card-amount" style="color:${this._ensureContrast(proj.color) || '#e94560'}">
                             HK$${unclaimedAmt.toFixed(0)}
                         </div>
                         <div class="project-card-sub">共 HK$${totalAmt.toFixed(0)}</div>
@@ -382,10 +382,10 @@ const App = {
                 pill.className = 'project-pill';
                 pill.textContent = proj.name;
                 pill.style.color = '#ffffff';
-                pill.style.borderColor = proj.color || '#e94560';
+                pill.style.borderColor = this._ensureContrast(proj.color) || '#e94560';
                 pill.style.borderWidth = '2px';
                 pill.style.borderStyle = 'solid';
-                pill.style.background = 'transparent';
+                pill.style.background = 'rgba(255,255,255,0.08)';
                 if (proj.id === this.selectedProject) {
                     pill.classList.add('selected');
                     pill.style.background = proj.color || '#e94560';
@@ -401,7 +401,7 @@ const App = {
                     const allProjects = DB.getAllProjects();
                     container.querySelectorAll('.project-pill').forEach((p, i) => {
                         p.classList.remove('selected');
-                        p.style.background = 'transparent';
+                        p.style.background = 'rgba(255,255,255,0.08)';
                     });
                     // Set selected pill
                     pill.classList.add('selected');
@@ -1065,6 +1065,21 @@ const App = {
         };
 
         document.getElementById('install-dismiss').onclick = () => banner.remove();
+    },
+
+    _ensureContrast(hex) {
+        if (!hex) return null;
+        // Parse hex to RGB and check luminance against dark bg
+        const r = parseInt(hex.slice(1, 3), 16);
+        const g = parseInt(hex.slice(3, 5), 16);
+        const b = parseInt(hex.slice(5, 7), 16);
+        const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+        // If too dark for our dark theme, lighten it
+        if (luminance < 0.3) {
+            const lighten = (c) => Math.min(255, c + 100);
+            return `rgb(${lighten(r)},${lighten(g)},${lighten(b)})`;
+        }
+        return hex;
     },
 
     _esc(str) {
