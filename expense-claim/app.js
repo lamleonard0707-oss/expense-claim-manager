@@ -12,6 +12,7 @@ const COLORS = [
 
 const App = {
     // ─── State ──────────────────────────────────────────
+    deferredInstallPrompt: null,
     currentView: null,
     currentUser: null,
     dashMonth: null,         // { year, month }  (0-indexed month)
@@ -33,6 +34,13 @@ const App = {
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('sw.js').catch(() => {});
         }
+
+        // PWA install prompt
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            this.deferredInstallPrompt = e;
+            this._showInstallBanner();
+        });
 
         // Online/offline indicator
         window.addEventListener('online', () => {
@@ -266,7 +274,7 @@ const App = {
                         <span class="project-card-meta">${projExpenses.length} 筆 · ${unclaimed.length} 未報銷</span>
                     </div>
                     <div class="project-card-right">
-                        <div class="project-card-amount" style="color:${proj.color || '#e94560'}">
+                        <div class="project-card-amount" style="color:${this._ensureContrast(proj.color) || '#e94560'}">
                             HK$${unclaimedAmt.toFixed(0)}
                         </div>
                         <div class="project-card-sub">共 HK$${totalAmt.toFixed(0)}</div>
@@ -373,22 +381,34 @@ const App = {
                 const pill = document.createElement('button');
                 pill.className = 'project-pill';
                 pill.textContent = proj.name;
-                pill.style.color = proj.color || '#e94560';
-                pill.style.borderColor = 'transparent';
+                pill.style.color = '#ffffff';
+                pill.style.borderColor = this._ensureContrast(proj.color) || '#e94560';
+                pill.style.borderWidth = '2px';
+                pill.style.borderStyle = 'solid';
+                pill.style.background = 'rgba(255,255,255,0.08)';
                 if (proj.id === this.selectedProject) {
                     pill.classList.add('selected');
-                    pill.style.borderColor = proj.color || '#e94560';
+                    pill.style.background = proj.color || '#e94560';
                     this.selectedProjectColor = proj.color;
+                    // Update header with selected project name
+                    const headerEl = document.getElementById('add-header-title');
+                    if (headerEl) headerEl.textContent = proj.name;
                 }
                 pill.addEventListener('click', () => {
                     this.selectedProject = proj.id;
                     this.selectedProjectColor = proj.color;
-                    container.querySelectorAll('.project-pill').forEach(p => {
+                    // Reset all pills to unselected style
+                    const allProjects = DB.getAllProjects();
+                    container.querySelectorAll('.project-pill').forEach((p, i) => {
                         p.classList.remove('selected');
-                        p.style.borderColor = 'transparent';
+                        p.style.background = 'rgba(255,255,255,0.08)';
                     });
+                    // Set selected pill
                     pill.classList.add('selected');
-                    pill.style.borderColor = proj.color || '#e94560';
+                    pill.style.background = proj.color || '#e94560';
+                    // Update header with selected project name
+                    const headerEl = document.getElementById('add-header-title');
+                    if (headerEl) headerEl.textContent = proj.name;
                 });
                 container.appendChild(pill);
             });
@@ -656,12 +676,78 @@ const App = {
                     this._updateBulkBar();
                 });
 
+                // Tap to open detail
+                item.addEventListener('click', () => this._openRecordDetail(exp));
+
                 listEl.appendChild(item);
             });
         } catch (e) {
             console.warn('DB not ready for records:', e);
             emptyEl.classList.remove('hidden');
         }
+    },
+
+    _openRecordDetail(exp) {
+        const modal = document.getElementById('record-modal');
+        modal.classList.remove('hidden');
+
+        // Fill form
+        document.getElementById('rec-desc').value = exp.desc || '';
+        document.getElementById('rec-amount').value = exp.amount || '';
+        document.getElementById('rec-currency').value = exp.currency || 'HKD';
+        document.getElementById('rec-date').value = exp.date || '';
+        document.getElementById('rec-payment').value = exp.payment || '現金';
+        document.getElementById('rec-notes').value = exp.notes || '';
+        document.getElementById('rec-status').value = exp.status || 'unclaimed';
+
+        // Show photo if exists
+        const photoArea = document.getElementById('record-photo-area');
+        const photoImg = document.getElementById('record-photo');
+        if (exp.photoBase64) {
+            photoImg.src = exp.photoBase64;
+            photoArea.classList.remove('hidden');
+        } else {
+            photoArea.classList.add('hidden');
+        }
+
+        // Close
+        document.getElementById('record-modal-close').onclick = () => modal.classList.add('hidden');
+
+        // Save
+        document.getElementById('record-save').onclick = () => {
+            try {
+                DB.updateExpense(exp.id, {
+                    desc: document.getElementById('rec-desc').value,
+                    amount: parseFloat(document.getElementById('rec-amount').value) || 0,
+                    currency: document.getElementById('rec-currency').value,
+                    date: document.getElementById('rec-date').value,
+                    payment: document.getElementById('rec-payment').value,
+                    notes: document.getElementById('rec-notes').value,
+                    status: document.getElementById('rec-status').value,
+                    syncedAt: null
+                });
+                try { Sync.push(); } catch(e) {}
+                modal.classList.add('hidden');
+                this._showToast('已更新');
+                this.loadRecords();
+            } catch (e) {
+                this._showToast('更新失敗：' + e.message);
+            }
+        };
+
+        // Delete
+        document.getElementById('record-delete').onclick = () => {
+            if (confirm('確定要刪除呢筆紀錄？')) {
+                try {
+                    DB.deleteExpense(exp.id);
+                    modal.classList.add('hidden');
+                    this._showToast('已刪除');
+                    this.loadRecords();
+                } catch (e) {
+                    this._showToast('刪除失敗');
+                }
+            }
+        };
     },
 
     _updateBulkBar() {
@@ -950,6 +1036,52 @@ const App = {
         }, duration);
     },
 
+    _showInstallBanner() {
+        // Remove existing banner if any
+        const existing = document.getElementById('install-banner');
+        if (existing) existing.remove();
+
+        const banner = document.createElement('div');
+        banner.id = 'install-banner';
+        banner.innerHTML = `
+            <div class="install-banner">
+                <span>📲 安裝到主畫面，用起嚟更方便！</span>
+                <button id="install-btn" class="btn-primary" style="padding:8px 16px;font-size:14px;width:auto;">安裝</button>
+                <button id="install-dismiss" class="btn-icon" style="font-size:16px;">✕</button>
+            </div>
+        `;
+        document.body.appendChild(banner);
+
+        document.getElementById('install-btn').onclick = async () => {
+            if (this.deferredInstallPrompt) {
+                this.deferredInstallPrompt.prompt();
+                const result = await this.deferredInstallPrompt.userChoice;
+                if (result.outcome === 'accepted') {
+                    this._showToast('安裝成功！');
+                }
+                this.deferredInstallPrompt = null;
+            }
+            banner.remove();
+        };
+
+        document.getElementById('install-dismiss').onclick = () => banner.remove();
+    },
+
+    _ensureContrast(hex) {
+        if (!hex) return null;
+        // Parse hex to RGB and check luminance against dark bg
+        const r = parseInt(hex.slice(1, 3), 16);
+        const g = parseInt(hex.slice(3, 5), 16);
+        const b = parseInt(hex.slice(5, 7), 16);
+        const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+        // If too dark for our dark theme, lighten it
+        if (luminance < 0.3) {
+            const lighten = (c) => Math.min(255, c + 100);
+            return `rgb(${lighten(r)},${lighten(g)},${lighten(b)})`;
+        }
+        return hex;
+    },
+
     _esc(str) {
         return String(str)
             .replace(/&/g, '&amp;')
@@ -958,6 +1090,13 @@ const App = {
             .replace(/"/g, '&quot;');
     }
 };
+
+// Force update: if ?clear=1 in URL, unregister SW and clear caches
+if (location.search.includes('clear=1')) {
+    caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k))));
+    navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
+    location.replace(location.pathname);
+}
 
 // Boot
 document.addEventListener('DOMContentLoaded', () => App.init());
