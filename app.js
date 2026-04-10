@@ -381,11 +381,14 @@ const App = {
                 const pill = document.createElement('button');
                 pill.className = 'project-pill';
                 pill.textContent = proj.name;
-                pill.style.color = proj.color || '#e94560';
-                pill.style.borderColor = 'transparent';
+                pill.style.color = '#ffffff';
+                pill.style.borderColor = proj.color || '#e94560';
+                pill.style.borderWidth = '2px';
+                pill.style.borderStyle = 'solid';
+                pill.style.background = 'transparent';
                 if (proj.id === this.selectedProject) {
                     pill.classList.add('selected');
-                    pill.style.borderColor = proj.color || '#e94560';
+                    pill.style.background = proj.color || '#e94560';
                     this.selectedProjectColor = proj.color;
                     // Update header with selected project name
                     const headerEl = document.getElementById('add-header-title');
@@ -394,12 +397,15 @@ const App = {
                 pill.addEventListener('click', () => {
                     this.selectedProject = proj.id;
                     this.selectedProjectColor = proj.color;
-                    container.querySelectorAll('.project-pill').forEach(p => {
+                    // Reset all pills to unselected style
+                    const allProjects = DB.getAllProjects();
+                    container.querySelectorAll('.project-pill').forEach((p, i) => {
                         p.classList.remove('selected');
-                        p.style.borderColor = 'transparent';
+                        p.style.background = 'transparent';
                     });
+                    // Set selected pill
                     pill.classList.add('selected');
-                    pill.style.borderColor = proj.color || '#e94560';
+                    pill.style.background = proj.color || '#e94560';
                     // Update header with selected project name
                     const headerEl = document.getElementById('add-header-title');
                     if (headerEl) headerEl.textContent = proj.name;
