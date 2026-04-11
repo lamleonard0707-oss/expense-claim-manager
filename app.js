@@ -736,6 +736,7 @@ const App = {
                     payment: document.getElementById('rec-payment').value,
                     notes: document.getElementById('rec-notes').value,
                     status: document.getElementById('rec-status').value,
+                    _wasSynced: true,
                     syncedAt: null
                 });
                 try { Sync.push(); } catch(e) {}
@@ -749,11 +750,11 @@ const App = {
 
         // Delete
         document.getElementById('record-delete').onclick = () => {
-            if (confirm('確定要刪除呢筆紀錄？')) {
+            if (confirm('確定要從 App 刪除呢筆紀錄？\n（Google Sheets 同 Drive 嘅記錄會保留）')) {
                 try {
                     DB.deleteExpense(exp.id);
                     modal.classList.add('hidden');
-                    this._showToast('已刪除');
+                    this._showToast('已從 App 刪除（Sheets 記錄保留）');
                     this.loadRecords();
                 } catch (e) {
                     this._showToast('刪除失敗');
