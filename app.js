@@ -903,6 +903,10 @@ const App = {
         const user = this._getUser();
         if (user) document.getElementById('settings-username').textContent = user.name;
 
+        // Show app version for debugging
+        const versionEl = document.getElementById('app-version');
+        if (versionEl) versionEl.textContent = 'v12';
+
         // Theme toggle
         const currentTheme = localStorage.getItem('ec_theme') || 'dark';
         document.getElementById('theme-toggle').querySelectorAll('.theme-btn').forEach(btn => {
