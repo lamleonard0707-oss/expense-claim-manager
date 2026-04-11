@@ -40,7 +40,8 @@ const Sync = {
         }
     },
 
-    async push() {
+    async push(opts) {
+        const onProgress = (opts && opts.onProgress) || function() {};
         this.lastErrors = [];
         if (!this.url) {
             this.lastErrors.push('Apps Script URL 未設定');
@@ -73,6 +74,7 @@ const Sync = {
                 };
 
                 // Step 1: addRecord WITHOUT photo (small payload, fits in URL)
+                onProgress(`📝 [${expense.id}] addRecord...`);
                 const addResult = await this._call({ action: 'addRecord', record: record, photo: null });
                 if (!addResult.success) {
                     failed++;
@@ -82,7 +84,7 @@ const Sync = {
 
                 // Step 2: if photo exists, upload via chunked GET
                 if (expense.photoBase64) {
-                    const photoOk = await this._uploadPhotoChunked(record, expense.photoBase64);
+                    const photoOk = await this._uploadPhotoChunked(record, expense.photoBase64, onProgress);
                     if (!photoOk.success) {
                         // Record IS in sheet but photo upload failed.
                         // Mark as synced anyway so we don't re-insert duplicate, but log warning.
@@ -101,19 +103,23 @@ const Sync = {
         return { synced, failed, errors: this.lastErrors };
     },
 
-    async _uploadPhotoChunked(record, photoDataUrl) {
-        try {
-            // Strip data URL prefix
-            let base64 = photoDataUrl;
-            if (base64.indexOf(',') !== -1) base64 = base64.split(',')[1];
+    async _uploadPhotoChunked(record, photoDataUrl, onProgress) {
+        const progress = onProgress || function() {};
+        // Strip data URL prefix
+        let base64 = photoDataUrl;
+        if (base64.indexOf(',') !== -1) base64 = base64.split(',')[1];
 
-            // GET URL has ~8KB practical limit. Each char gets URL-encoded (~1.3x for base64).
-            // Use 3000-char chunks → encoded ~4KB → URL with overhead ~5KB. Safe.
-            const CHUNK_SIZE = 3000;
-            const totalChunks = Math.ceil(base64.length / CHUNK_SIZE);
+        // Apps Script /exec GET endpoint practical query-string limit is ~2 KB.
+        // base64 chars: ~70% are alphanumeric (URL-safe) + ~30% are `+`, `/`, `=`
+        // which become %2B, %2F, %3D — so encodeURIComponent inflates base64 by ~1.6x.
+        // 1000-char chunk → encoded ~1.6 KB → URL with JSON wrapper + base ~1.9 KB. Safe.
+        // (v23 used 3000 → ~5 KB URL → silently failed with "TypeError: Failed to fetch".)
+        const CHUNK_SIZE = 1000;
+        const totalChunks = Math.ceil(base64.length / CHUNK_SIZE);
 
-            for (let i = 0; i < totalChunks; i++) {
-                const chunk = base64.substring(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+        for (let i = 0; i < totalChunks; i++) {
+            const chunk = base64.substring(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+            try {
                 const result = await this._call({
                     action: 'uploadPhotoChunk',
                     record: { id: record.id, project: record.project, paymentDate: record.paymentDate, amount: record.amount, currency: record.currency },
@@ -122,12 +128,13 @@ const Sync = {
                     totalChunks: totalChunks
                 });
                 if (!result.success) {
-                    return { success: false, error: `chunk ${i}/${totalChunks} 失敗: ${result.error || JSON.stringify(result)}` };
+                    return { success: false, error: `chunk ${i + 1}/${totalChunks} 失敗: ${result.error || JSON.stringify(result)}` };
                 }
+            } catch (chunkErr) {
+                return { success: false, error: `chunk ${i + 1}/${totalChunks} ${chunkErr.name || 'Error'}: ${chunkErr.message}` };
             }
-            return { success: true };
-        } catch (e) {
-            return { success: false, error: `${e.name || 'Error'}: ${e.message}` };
+            progress(`📤 chunk ${i + 1}/${totalChunks}`);
         }
+        return { success: true };
     }
 };
