@@ -63,6 +63,40 @@ function handleRequest(data) {
         return ContentService.createTextOutput(JSON.stringify({ success: true, driveLink: photoLink })).setMimeType(ContentService.MimeType.JSON);
     }
 
+    if (action === 'uploadPhotoChunk') {
+        // Chunked photo upload — collect chunks in CacheService, assemble on last chunk
+        var cache = CacheService.getScriptCache();
+        var recordId = data.record.id;
+        var cacheKey = 'photo_chunk_' + recordId + '_' + data.chunkIndex;
+        cache.put(cacheKey, data.chunk, 300); // 5 min TTL
+
+        if (data.chunkIndex === data.totalChunks - 1) {
+            // Last chunk — assemble all chunks
+            var allChunks = '';
+            for (var ci = 0; ci < data.totalChunks; ci++) {
+                var ck = 'photo_chunk_' + recordId + '_' + ci;
+                var chunkData = cache.get(ck);
+                if (!chunkData) {
+                    return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'Missing chunk ' + ci })).setMimeType(ContentService.MimeType.JSON);
+                }
+                allChunks += chunkData;
+                cache.remove(ck);
+            }
+            var fullBase64 = 'data:image/jpeg;base64,' + allChunks;
+            var photoLink2 = uploadPhoto(fullBase64, data.record);
+            if (photoLink2) {
+                var ss2 = SpreadsheetApp.openById(SPREADSHEET_ID);
+                var found2 = findRecordById(ss2, data.record.id);
+                if (found2) {
+                    found2.sheet.getRange(found2.row, 11).setValue(photoLink2);
+                }
+            }
+            return ContentService.createTextOutput(JSON.stringify({ success: true, driveLink: photoLink2 })).setMimeType(ContentService.MimeType.JSON);
+        }
+
+        return ContentService.createTextOutput(JSON.stringify({ success: true, chunk: data.chunkIndex })).setMimeType(ContentService.MimeType.JSON);
+    }
+
     return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'Unknown action' })).setMimeType(ContentService.MimeType.JSON);
 }
 
