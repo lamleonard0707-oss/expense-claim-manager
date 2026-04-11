@@ -125,7 +125,7 @@
 <section id="add-view" class="view hidden">
     <header class="app-header">
         <button class="back-btn" data-back="dashboard">&#8592;</button>
-        <h2>新增報銷</h2>
+        <h2 id="add-header-title">新增報銷</h2>
         <div></div>
     </header>
 
@@ -160,7 +160,7 @@
                 </div>
                 <img id="photo-preview" class="photo-preview hidden" alt="收據預覽">
             </label>
-            <input type="file" id="photo-input" accept="image/*" capture="environment" class="hidden">
+            <input type="file" id="photo-input" accept="image/*" class="hidden">
             <button id="photo-analyze-btn" class="btn-secondary btn-full hidden">🤖 AI 分析收據</button>
         </div>
 
@@ -369,6 +369,17 @@
         </div>
 
         <div class="settings-section">
+            <h3 class="settings-section-title">外觀</h3>
+            <div class="settings-item" style="justify-content:space-between;">
+                <span class="settings-label">主題模式</span>
+                <div class="theme-toggle" id="theme-toggle">
+                    <button class="theme-btn" data-theme="dark">🌙 夜光</button>
+                    <button class="theme-btn" data-theme="light">☀️ 日光</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-section">
             <h3 class="settings-section-title">AI 設定</h3>
             <div class="settings-item-block">
                 <label for="settings-gemini-key">Gemini API Key</label>
@@ -386,6 +397,10 @@
                 <label for="settings-script-url">Google Apps Script URL</label>
                 <input type="url" id="settings-script-url" placeholder="https://script.google.com/...">
                 <button id="settings-script-save" class="btn-secondary btn-sm">儲存</button>
+            </div>
+            <div class="settings-item-block" style="margin-top:12px">
+                <button id="settings-manual-sync" class="btn-primary btn-sm" style="width:100%">🔄 手動同步</button>
+                <div id="sync-log" style="margin-top:8px;font-size:12px;color:var(--text-secondary);white-space:pre-wrap;max-height:200px;overflow-y:auto"></div>
             </div>
         </div>
 
@@ -449,12 +464,77 @@
     </nav>
 </section>
 
+<!-- Record Detail Modal -->
+<div id="record-modal" class="modal-overlay hidden">
+    <div class="modal-card" style="max-height:90vh;overflow-y:auto;">
+        <div class="modal-header">
+            <h3>紀錄詳情</h3>
+            <button id="record-modal-close" class="modal-close">✕</button>
+        </div>
+        <div id="record-photo-area" class="hidden" style="margin-bottom:12px;">
+            <img id="record-photo" style="width:100%;border-radius:8px;" alt="單據">
+        </div>
+        <div class="expense-form">
+            <div class="form-group">
+                <label for="rec-desc">描述</label>
+                <input type="text" id="rec-desc">
+            </div>
+            <div class="form-row">
+                <div class="form-group flex-1">
+                    <label for="rec-amount">金額</label>
+                    <input type="number" id="rec-amount" step="0.01" inputmode="decimal">
+                </div>
+                <div class="form-group flex-1">
+                    <label for="rec-currency">貨幣</label>
+                    <select id="rec-currency">
+                        <option value="HKD">HKD</option>
+                        <option value="RMB">RMB</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group flex-1">
+                    <label for="rec-date">日期</label>
+                    <input type="date" id="rec-date">
+                </div>
+                <div class="form-group flex-1">
+                    <label for="rec-payment">付款方式</label>
+                    <select id="rec-payment">
+                        <option value="現金">現金</option>
+                        <option value="信用卡">信用卡</option>
+                        <option value="淘寶">淘寶</option>
+                        <option value="拼多多">拼多多</option>
+                        <option value="轉數快">轉數快</option>
+                        <option value="支付寶">支付寶</option>
+                        <option value="其他">其他</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="rec-notes">備注</label>
+                <input type="text" id="rec-notes">
+            </div>
+            <div class="form-group">
+                <label>狀態</label>
+                <select id="rec-status">
+                    <option value="unclaimed">未報銷</option>
+                    <option value="claimed">已報銷</option>
+                </select>
+            </div>
+            <div class="modal-actions" style="margin-top:12px;">
+                <button id="record-delete" class="btn-secondary" style="color:#e94560;">刪除</button>
+                <button id="record-save" class="btn-primary">儲存修改</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- ===================== TOAST ===================== -->
 <div id="toast" class="toast hidden"></div>
 
-<script src="db.js"></script>
-<script src="ai.js"></script>
-<script src="sync.js"></script>
-<script src="app.js"></script>
+<script src="db.js?v=11"></script>
+<script src="ai.js?v=11"></script>
+<script src="sync.js?v=11"></script>
+<script src="app.js?v=11"></script>
 </body>
 </html>

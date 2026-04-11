@@ -26,6 +26,12 @@ const App = {
 
     // ─── Init ───────────────────────────────────────────
     init() {
+        // Apply saved theme immediately
+        const savedTheme = localStorage.getItem('ec_theme') || 'dark';
+        if (savedTheme === 'light') {
+            document.documentElement.setAttribute('data-theme', 'light');
+        }
+
         const now = new Date();
         this.dashMonth = { year: now.getFullYear(), month: now.getMonth() };
         this.recMonth  = { year: now.getFullYear(), month: now.getMonth() };
@@ -45,7 +51,7 @@ const App = {
         // Online/offline indicator
         window.addEventListener('online', () => {
             document.body.classList.remove('offline');
-            try { Sync.push(); } catch(e) {}
+            this._autoSync();
         });
         window.addEventListener('offline', () => document.body.classList.add('offline'));
         if (!navigator.onLine) document.body.classList.add('offline');
@@ -381,11 +387,12 @@ const App = {
                 const pill = document.createElement('button');
                 pill.className = 'project-pill';
                 pill.textContent = proj.name;
-                pill.style.color = '#ffffff';
-                pill.style.borderColor = this._ensureContrast(proj.color) || '#e94560';
+                const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+                pill.style.color = isLight ? '#333' : '#fff';
+                pill.style.borderColor = isLight ? (proj.color || '#e94560') : (this._ensureContrast(proj.color) || '#e94560');
                 pill.style.borderWidth = '2px';
                 pill.style.borderStyle = 'solid';
-                pill.style.background = 'rgba(255,255,255,0.08)';
+                pill.style.background = isLight ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.08)';
                 if (proj.id === this.selectedProject) {
                     pill.classList.add('selected');
                     pill.style.background = proj.color || '#e94560';
@@ -488,6 +495,11 @@ const App = {
 
                 this._addChatBubble(messages, 'ai', msg);
 
+                // Show AI message (questions, warnings, tips)
+                if (result.message) {
+                    this._addChatBubble(messages, 'ai', `💬 ${result.message}`);
+                }
+
                 // Fill form
                 if (result.desc)    document.getElementById('exp-desc').value    = result.desc;
                 if (result.amount)  document.getElementById('exp-amount').value  = result.amount;
@@ -554,7 +566,7 @@ const App = {
             desc, amount, currency, date, payment, notes,
             photoBase64: this.photoBase64 || null,
             status: 'unclaimed',
-            createdAt: new Date().toISOString()
+            createdAt: App._hkNow()
         };
 
         try {
@@ -580,13 +592,22 @@ const App = {
             DB.saveExpense(expense);
             this._showToast('✅ 已儲存！');
 
-            // Trigger sync (best-effort)
-            try { Sync.push(); } catch(e) {}
+            // Trigger sync with feedback
+            this._autoSync();
 
             // Go back to dashboard
             setTimeout(() => this.showView('dashboard'), 600);
         } catch (e) {
             this._showError(document.getElementById('add-error'), `儲存失敗：${e.message}`);
+        }
+    },
+
+    async _autoSync() {
+        if (!navigator.onLine) return;
+        try {
+            await Sync.push();
+        } catch (e) {
+            console.warn('Auto-sync failed:', e);
         }
     },
 
@@ -602,6 +623,9 @@ const App = {
 
         // Populate project filter
         this._populateProjectFilter('rec-filter-project');
+
+        // Default to showing unclaimed only
+        document.getElementById('rec-filter-status').value = 'unclaimed';
 
         document.getElementById('rec-filter-project').onchange = () => this._renderRecordsList();
         document.getElementById('rec-filter-status').onchange  = () => this._renderRecordsList();
@@ -724,9 +748,10 @@ const App = {
                     payment: document.getElementById('rec-payment').value,
                     notes: document.getElementById('rec-notes').value,
                     status: document.getElementById('rec-status').value,
+                    _wasSynced: true,
                     syncedAt: null
                 });
-                try { Sync.push(); } catch(e) {}
+                this._autoSync();
                 modal.classList.add('hidden');
                 this._showToast('已更新');
                 this.loadRecords();
@@ -737,11 +762,11 @@ const App = {
 
         // Delete
         document.getElementById('record-delete').onclick = () => {
-            if (confirm('確定要刪除呢筆紀錄？')) {
+            if (confirm('確定要從 App 刪除呢筆紀錄？\n（Google Sheets 同 Drive 嘅記錄會保留）')) {
                 try {
                     DB.deleteExpense(exp.id);
                     modal.classList.add('hidden');
-                    this._showToast('已刪除');
+                    this._showToast('已從 App 刪除（Sheets 記錄保留）');
                     this.loadRecords();
                 } catch (e) {
                     this._showToast('刪除失敗');
@@ -765,7 +790,7 @@ const App = {
     _bulkClaim() {
         try {
             this.selectedRecords.forEach(id => DB.updateExpenseStatus(id, 'claimed'));
-            try { Sync.push(); } catch(e) {}
+            this._autoSync();
             this._showToast(`✅ ${this.selectedRecords.size} 筆已標記為報銷`);
             this.selectedRecords.clear();
             this._renderRecordsList();
@@ -878,6 +903,24 @@ const App = {
         const user = this._getUser();
         if (user) document.getElementById('settings-username').textContent = user.name;
 
+        // Theme toggle
+        const currentTheme = localStorage.getItem('ec_theme') || 'dark';
+        document.getElementById('theme-toggle').querySelectorAll('.theme-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.theme === currentTheme);
+            btn.addEventListener('click', () => {
+                const theme = btn.dataset.theme;
+                localStorage.setItem('ec_theme', theme);
+                if (theme === 'light') {
+                    document.documentElement.setAttribute('data-theme', 'light');
+                } else {
+                    document.documentElement.removeAttribute('data-theme');
+                }
+                document.getElementById('theme-toggle').querySelectorAll('.theme-btn').forEach(b => {
+                    b.classList.toggle('active', b.dataset.theme === theme);
+                });
+            });
+        });
+
         // Load saved keys
         const geminiKey = localStorage.getItem('ec_gemini_key') || '';
         const scriptUrl = localStorage.getItem('ec_script_url') || '';
@@ -904,6 +947,72 @@ const App = {
             localStorage.setItem('ec_script_url', url);
             this._showToast('Apps Script URL 已儲存');
             try { Sync.setUrl(url); } catch(e) {}
+        };
+
+        // Manual sync with logging
+        document.getElementById('settings-manual-sync').onclick = async () => {
+            const logEl = document.getElementById('sync-log');
+            logEl.textContent = '開始同步...\n';
+            const url = Sync.url;
+            if (!url) { logEl.textContent += '❌ 未設定 Apps Script URL\n'; return; }
+            logEl.textContent += `URL: ${url.substring(0, 50)}...\n`;
+
+            const unsynced = DB.getUnsyncedExpenses();
+            logEl.textContent += `未同步記錄: ${unsynced.length} 筆\n`;
+
+            if (unsynced.length === 0) { logEl.textContent += '✅ 全部已同步\n'; return; }
+
+            const projects = DB.getAllProjects();
+            const projectMap = {};
+            projects.forEach(p => { projectMap[p.id] = p.name; });
+
+            for (const exp of unsynced) {
+                const isUpdate = exp._wasSynced;
+                const action = isUpdate ? 'updateRecord' : 'addRecord';
+                logEl.textContent += `\n[${exp.id}] ${exp.desc} — ${action}\n`;
+                logEl.textContent += `  status=${exp.status}, _wasSynced=${exp._wasSynced}\n`;
+
+                const payload = {
+                    action,
+                    record: {
+                        id: exp.id,
+                        project: projectMap[exp.projectId] || '未分類',
+                        amount: exp.amount,
+                        currency: exp.currency,
+                        description: exp.desc,
+                        paymentDate: exp.date,
+                        paymentMethod: exp.payment,
+                        paidBy: JSON.parse(localStorage.getItem('ec_user') || '{}').name || '未知',
+                        claimStatus: exp.status,
+                        claimDate: exp.claimDate || '',
+                        notes: exp.notes || '',
+                        createdAt: exp.createdAt
+                    },
+                    photo: null
+                };
+
+                try {
+                    const encoded = encodeURIComponent(JSON.stringify(payload));
+                    logEl.textContent += `  payload size: ${encoded.length} chars\n`;
+                    const resp = await fetch(url + '?data=' + encoded, { method: 'GET', redirect: 'follow' });
+                    const text = await resp.text();
+                    logEl.textContent += `  response: ${text.substring(0, 200)}\n`;
+                    try {
+                        const result = JSON.parse(text);
+                        if (result.success) {
+                            DB.markSynced(exp.id);
+                            logEl.textContent += `  ✅ 同步成功\n`;
+                        } else {
+                            logEl.textContent += `  ❌ ${result.error}\n`;
+                        }
+                    } catch (e) {
+                        logEl.textContent += `  ⚠️ parse error\n`;
+                    }
+                } catch (e) {
+                    logEl.textContent += `  ❌ fetch error: ${e.message}\n`;
+                }
+            }
+            logEl.textContent += '\n同步完成！';
         };
 
         // Reminder hour
@@ -1015,6 +1124,13 @@ const App = {
         try {
             return JSON.parse(localStorage.getItem('ec_user'));
         } catch(e) { return null; }
+    },
+
+    _hkNow() {
+        // Return ISO string in HK timezone (UTC+8)
+        const now = new Date();
+        const hk = new Date(now.getTime() + (8 * 60 - now.getTimezoneOffset()) * 60000);
+        return hk.toISOString().replace('Z', '+08:00');
     },
 
     _showError(el, msg) {
