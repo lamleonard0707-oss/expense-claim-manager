@@ -42,7 +42,7 @@ const DB = {
             id: this._genId(),
             name: project.name || '',
             color: project.color || '#e94560',
-            createdAt: this._hkNow(),
+            createdAt: new Date().toISOString(),
         };
         projects.push(newProject);
         this._save(this.KEYS.projects, projects);
@@ -93,7 +93,7 @@ const DB = {
             notes:       expense.notes       || '',
             photoBase64: expense.photoBase64 || null,
             status:      expense.status      || 'unclaimed',
-            createdAt:   expense.createdAt   || this._hkNow(),
+            createdAt:   expense.createdAt   || new Date().toISOString(),
             syncedAt:    null,
         };
         expenses.push(newExpense);
@@ -120,27 +120,17 @@ const DB = {
         this._save(this.KEYS.expenses, expenses);
     },
 
-    _hkNow() {
-        const now = new Date();
-        const utc = now.getTime() + now.getTimezoneOffset() * 60000;
-        const hk = new Date(utc + 8 * 3600000);
-        const p = n => String(n).padStart(2, '0');
-        return `${hk.getFullYear()}-${p(hk.getMonth()+1)}-${p(hk.getDate())} ${p(hk.getHours())}:${p(hk.getMinutes())}:${p(hk.getSeconds())}`;
-    },
-
     updateExpenseStatus(id, status) {
         // Called as: DB.updateExpenseStatus(id, 'claimed')
-        // Mark _wasSynced so Sync.push knows to use updateRecord instead of addRecord
         return this.updateExpense(id, {
             status,
-            claimDate: status === 'claimed' ? this._hkNow() : null,
-            _wasSynced: true,
+            claimDate: status === 'claimed' ? new Date().toISOString() : null,
             syncedAt: null,
         });
     },
 
     markSynced(id) {
-        return this.updateExpense(id, { syncedAt: this._hkNow() });
+        return this.updateExpense(id, { syncedAt: new Date().toISOString() });
     },
 
     getUnsyncedExpenses() {
@@ -150,36 +140,32 @@ const DB = {
     // ─── Duplicate Detection ────────────────────────────
 
     checkDuplicate(expense) {
-        // Find existing record with ALL of:
+        // Find existing record with:
         //   - same projectId
-        //   - same or very similar desc (>= 50% char overlap)
-        //   - exact same amount
-        //   - exact same date
+        //   - amount within ±10%
+        //   - date within ±3 days
         const expenses = this._load(this.KEYS.expenses);
         const amount   = Number(expense.amount) || 0;
-        const desc     = (expense.desc || '').trim();
+        const date     = expense.date ? new Date(expense.date).getTime() : null;
 
-        if (!amount || !expense.date || !desc) return null;
+        if (!amount || !date) return null;
+
+        const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
 
         for (const e of expenses) {
             if (e.projectId !== expense.projectId) continue;
 
-            // Exact same amount
             const eAmount = Number(e.amount) || 0;
-            if (eAmount !== amount) continue;
+            if (eAmount === 0) continue;
 
-            // Exact same date
-            if (e.date !== expense.date) continue;
+            // Amount within ±10%
+            const amountDiff = Math.abs(eAmount - amount) / amount;
+            if (amountDiff > 0.1) continue;
 
-            // Similar description (>= 50% character overlap)
-            const eDesc = (e.desc || '').trim();
-            if (!eDesc) continue;
-            const shorter = Math.min(desc.length, eDesc.length);
-            let matchChars = 0;
-            for (let i = 0; i < shorter; i++) {
-                if (desc[i] === eDesc[i]) matchChars++;
-            }
-            if (matchChars / shorter < 0.5) continue;
+            // Date within ±3 days
+            const eDate = e.date ? new Date(e.date).getTime() : null;
+            if (!eDate) continue;
+            if (Math.abs(eDate - date) > THREE_DAYS_MS) continue;
 
             return e; // duplicate found
         }
