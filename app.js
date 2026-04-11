@@ -905,7 +905,7 @@ const App = {
 
         // Show app version for debugging
         const versionEl = document.getElementById('app-version');
-        if (versionEl) versionEl.textContent = 'v12';
+        if (versionEl) versionEl.textContent = 'v13';
 
         // Theme toggle
         const currentTheme = localStorage.getItem('ec_theme') || 'dark';
