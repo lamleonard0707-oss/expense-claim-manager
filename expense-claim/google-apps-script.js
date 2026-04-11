@@ -3,8 +3,8 @@
 // Deploy as Web App: Execute as Me, Anyone can access
 // ============================================================
 
-var SPREADSHEET_ID = 'YOUR_SPREADSHEET_ID_HERE';  // Fill in your Google Sheets ID
-var DRIVE_FOLDER_ID = 'YOUR_DRIVE_FOLDER_ID_HERE'; // Fill in your Google Drive folder ID
+var SPREADSHEET_ID = '1-hOXqcjWWUnXBDbmSOIRRFJYnARio1rZFwyodRHGgdk';
+var DRIVE_FOLDER_ID = '1YR3sfyjILQjrD6XVq9QUYxOLQWVFKGnz';
 
 var HEADERS = [
     'ID', '日期', '項目', '描述', '金額', '貨幣',
@@ -15,27 +15,47 @@ var HEADERS = [
 // Entry Point
 // ============================================================
 
+function doGet(e) {
+    try {
+        var dataStr = e.parameter.data;
+        if (!dataStr) {
+            return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'No data' })).setMimeType(ContentService.MimeType.JSON);
+        }
+        var data = JSON.parse(dataStr);
+        return handleRequest(data);
+    } catch (err) {
+        return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() })).setMimeType(ContentService.MimeType.JSON);
+    }
+}
+
 function doPost(e) {
     try {
         var data = JSON.parse(e.postData.contents);
-        var action = data.action;
-
-        if (action === 'addRecord') {
-            var result = addRecord(data.record, data.photo);
-            return ContentService
-                .createTextOutput(JSON.stringify(result))
-                .setMimeType(ContentService.MimeType.JSON);
-        }
-
-        return ContentService
-            .createTextOutput(JSON.stringify({ success: false, error: 'Unknown action' }))
-            .setMimeType(ContentService.MimeType.JSON);
-
+        return handleRequest(data);
     } catch (err) {
-        return ContentService
-            .createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
-            .setMimeType(ContentService.MimeType.JSON);
+        return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() })).setMimeType(ContentService.MimeType.JSON);
     }
+}
+
+function handleRequest(data) {
+    var action = data.action;
+
+    if (action === 'addRecord') {
+        var result = addRecord(data.record, data.photo);
+        return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (action === 'updateRecord') {
+        var updateResult = updateRecord(data.record);
+        return ContentService.createTextOutput(JSON.stringify(updateResult)).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (action === 'uploadPhoto') {
+        var photoLink = uploadPhoto(data.photo, data.record);
+        return ContentService.createTextOutput(JSON.stringify({ success: true, driveLink: photoLink })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'Unknown action' })).setMimeType(ContentService.MimeType.JSON);
 }
 
 // ============================================================
@@ -45,8 +65,19 @@ function doPost(e) {
 function addRecord(record, photoBase64) {
     var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
 
-    // Determine tab name from paymentDate (e.g. "2026-04")
-    var tabName = record.paymentDate ? record.paymentDate.substring(0, 7) : getMonthTab();
+    // Check if this record already exists (upsert logic)
+    var existing = findRecordById(ss, record.id);
+    if (existing) {
+        // Record exists — update status and claim date only
+        existing.sheet.getRange(existing.row, 9).setValue(record.claimStatus);
+        existing.sheet.getRange(existing.row, 10).setNumberFormat('@').setValue(formatHKDateTime(record.claimDate));
+        return { success: true, updated: true, row: existing.row, tab: existing.sheet.getName() };
+    }
+
+    // Determine tab name from project + month (e.g. "Partyland MK - 2026-04")
+    var monthStr = record.paymentDate ? record.paymentDate.substring(0, 7) : getMonthTab();
+    var projectName = record.project || '未分類';
+    var tabName = projectName + ' - ' + monthStr;
     var sheet = getOrCreateSheet(ss, tabName);
 
     // Upload photo to Drive if provided
@@ -71,13 +102,17 @@ function addRecord(record, photoBase64) {
         record.paymentMethod,
         record.paidBy,
         record.claimStatus,
-        record.claimDate,
+        formatHKDateTime(record.claimDate),
         photoLink,
-        record.createdAt
+        formatHKDateTime(record.createdAt)
     ];
 
     var range = sheet.getRange(insertRow, 1, 1, row.length);
     range.setValues([row]);
+
+    // Force date columns as plain text to prevent timezone conversion
+    sheet.getRange(insertRow, 10).setNumberFormat('@'); // claimDate
+    sheet.getRange(insertRow, 12).setNumberFormat('@'); // createdAt
 
     // Format amount column (E) as number
     sheet.getRange(insertRow, 5).setNumberFormat('#,##0.00');
@@ -88,15 +123,74 @@ function addRecord(record, photoBase64) {
     return { success: true, row: insertRow, tab: tabName };
 }
 
+// Search all sheets for a record by ID
+function findRecordById(ss, recordId) {
+    var sheets = ss.getSheets();
+    for (var s = 0; s < sheets.length; s++) {
+        var sheet = sheets[s];
+        var lastRow = sheet.getLastRow();
+        if (lastRow < 2) continue;
+
+        var ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+        for (var r = 0; r < ids.length; r++) {
+            if (String(ids[r][0]) === String(recordId)) {
+                return { sheet: sheet, row: r + 2 };
+            }
+        }
+    }
+    return null;
+}
+
+// ============================================================
+// Update Record (for claim status changes)
+// ============================================================
+
+function updateRecord(record) {
+    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var sheets = ss.getSheets();
+
+    // Search all tabs for the record by ID
+    for (var s = 0; s < sheets.length; s++) {
+        var sheet = sheets[s];
+        var lastRow = sheet.getLastRow();
+        if (lastRow < 2) continue;
+
+        var ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+        for (var r = 0; r < ids.length; r++) {
+            if (String(ids[r][0]) === String(record.id)) {
+                var rowNum = r + 2;
+                // Update status (col 9) and claim date (col 10)
+                sheet.getRange(rowNum, 9).setValue(record.claimStatus);
+                sheet.getRange(rowNum, 10).setNumberFormat('@').setValue(formatHKDateTime(record.claimDate));
+                return { success: true, updated: true, tab: sheet.getName(), row: rowNum };
+            }
+        }
+    }
+
+    return { success: false, error: 'Record not found: ' + record.id };
+}
+
 // ============================================================
 // Sheet Helpers
 // ============================================================
 
+// Convert ISO datetime to readable HK time string (prevents Sheets auto-timezone conversion)
+function formatHKDateTime(isoStr) {
+    if (!isoStr) return '';
+    try {
+        var d = new Date(isoStr);
+        if (isNaN(d.getTime())) return isoStr; // Not a valid date, return as-is
+        return Utilities.formatDate(d, 'Asia/Hong_Kong', 'yyyy-MM-dd HH:mm:ss');
+    } catch (e) {
+        return isoStr;
+    }
+}
+
 function getMonthTab() {
+    // Force Hong Kong timezone (UTC+8)
     var now = new Date();
-    var y = now.getFullYear();
-    var m = String(now.getMonth() + 1).padStart(2, '0');
-    return y + '-' + m;
+    var hkTime = Utilities.formatDate(now, 'Asia/Hong_Kong', 'yyyy-MM');
+    return hkTime;
 }
 
 function getOrCreateSheet(ss, tabName) {
@@ -251,7 +345,15 @@ function rebuildSubtotals(sheet) {
 
 function uploadPhoto(base64Data, record) {
     try {
-        var folder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
+        var rootFolder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
+
+        // Create project subfolder if not exists
+        var projectName = record.project || '未分類';
+        var projectFolder = getOrCreateSubfolder(rootFolder, projectName);
+
+        // Create month subfolder under project (e.g. "2026-04")
+        var monthStr = record.paymentDate ? record.paymentDate.substring(0, 7) : getMonthTab();
+        var monthFolder = getOrCreateSubfolder(projectFolder, monthStr);
 
         // Strip data URL prefix if present
         var imageData = base64Data;
@@ -265,7 +367,7 @@ function uploadPhoto(base64Data, record) {
             buildPhotoFilename(record)
         );
 
-        var file = folder.createFile(blob);
+        var file = monthFolder.createFile(blob);
         file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
 
         return file.getUrl();
@@ -273,6 +375,14 @@ function uploadPhoto(base64Data, record) {
         Logger.log('Photo upload failed: ' + err.toString());
         return '';
     }
+}
+
+function getOrCreateSubfolder(parentFolder, folderName) {
+    var folders = parentFolder.getFoldersByName(folderName);
+    if (folders.hasNext()) {
+        return folders.next();
+    }
+    return parentFolder.createFolder(folderName);
 }
 
 function buildPhotoFilename(record) {
