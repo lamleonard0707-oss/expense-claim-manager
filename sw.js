@@ -1,9 +1,9 @@
-const CACHE_NAME = 'expense-claim-v15';
+const CACHE_NAME = 'expense-claim-v18';
 const ASSETS = ['/', 'index.html', 'style.css', 'app.js', 'db.js', 'ai.js', 'sync.js', 'manifest.json'];
 
 self.addEventListener('install', e => {
-    e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(ASSETS)));
     self.skipWaiting();
+    e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(ASSETS)));
 });
 
 self.addEventListener('activate', e => {

@@ -41,14 +41,12 @@ const AI = {
 === 智能分析規則（最重要！）===
 
 📌 描述要具體，唔好太 generic：
-- 銀行轉帳/FPS/轉數快/網上轉帳/ATM轉帳 → 呢類單據通常冇寫明用途！你一定要喺 message 問：「呢筆轉帳係用嚟做咩㗎？例如：交租、還錢、買嘢付款？請補充用途方便報銷分類」。desc 暫時寫「轉帳 - 待補充用途」，唔好當普通消費咁寫
+- 銀行轉帳/FPS/轉數快 → 唔好淨係寫「銀行轉帳」，要喺 message 問：「呢筆轉帳係用嚟做咩㗎？例如：交租、還錢、買嘢付款？請補充用途方便報銷分類」
 - 超市/便利店收據 → 睇清楚買咗咩，desc 要寫主要物品，唔好寫「超市購物」
 - 外賣平台 → 要寫餐廳名，唔好淨係寫「外賣」
 - 如果真係睇唔清楚用途 → message 一定要問用戶補充
-- 任何冇明確消費目的嘅交易（轉帳、匯款、過數）→ message 必問用途
 
-📌 日期處理（今日係 ${today}）：
-- 最重要：如果收據/截圖上面完全搵唔到日期 → date 設為 null，message 一定要寫：「呢張單上面搵唔到日期，請你手動輸入正確日期」。絕對唔好靜雞雞用今日日期填上去！
+📌 日期異常檢測（今日係 ${today}）：
 - 如果收據日期同今日相差超過 30 日 → message 要提醒：「呢張單係 [日期] 嘅，距離而家已經 [X] 日，係咪而家先入？遲咗報銷可能有問題喎」
 - 如果收據日期同今日相差超過 180 日 → message 要強調：「⚠️ 呢張單已經超過半年（[日期]），確定要報銷？建議盡快處理」
 - 如果收據日期係未來日期 → message 要問：「呢個日期好似係未來嘅喎，係咪搞錯咗？」
@@ -67,7 +65,7 @@ const AI = {
 5. 如果有 ¥ 符號或人民幣 → currency = RMB
 6. 如果有 $ 符號（香港情況）→ currency = HKD
 7. 如果搵唔到金額 → error 寫明叫用戶手動輸入，amount 設為 null
-8. 如果搵唔到日期 → date 設為 null（唔好用今日日期！），message 提醒用戶手動填
+8. 如果搵唔到日期 → date 用今日日期：${today}
 9. 如果收據有多項費用 → suggestions 入面建議分開記錄或合併
 10. 文字輸入例如「五金鋪雜項 $46」→ desc="五金鋪雜項"，amount=46，currency=HKD
 11. 文字輸入例如「淘寶買咗枕頭 ¥89」→ desc="淘寶買枕頭"，amount=89，currency=RMB，payment=淘寶
@@ -157,7 +155,7 @@ const AI = {
                 desc: parsed.desc || '',
                 amount: typeof parsed.amount === 'number' ? parsed.amount : null,
                 currency: validCurrencies.includes(parsed.currency) ? parsed.currency : 'HKD',
-                date: parsed.date || '',
+                date: parsed.date || today,
                 payment: validPayments.includes(parsed.payment) ? parsed.payment : '其他',
                 suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [],
                 error: parsed.error || null,
