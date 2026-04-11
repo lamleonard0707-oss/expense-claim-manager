@@ -96,7 +96,7 @@ function handleRequest(data) {
         var cache = CacheService.getScriptCache();
         var recordId = data.record.id;
         var cacheKey = 'photo_chunk_' + recordId + '_' + data.chunkIndex;
-        cache.put(cacheKey, data.chunk, 300); // 5 min TTL
+        cache.put(cacheKey, data.chunk, 21600); // 6h TTL — safety net for slow uploads
 
         if (data.chunkIndex === data.totalChunks - 1) {
             // Last chunk — assemble all chunks

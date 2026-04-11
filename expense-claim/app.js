@@ -38,7 +38,7 @@ const App = {
 
         // Register service worker
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js?v=22t1775905600').catch(() => {});
+            navigator.serviceWorker.register('sw.js?v=23t1775906400').catch(() => {});
         }
 
         // PWA install prompt
@@ -437,15 +437,48 @@ const App = {
 
         const reader = new FileReader();
         reader.onload = (ev) => {
-            this.photoBase64 = ev.target.result; // data:image/...;base64,...
+            // Compress before storing — phone photos are 2-5MB which:
+            // (a) blow past localStorage 5MB quota
+            // (b) require 100s of chunked GETs to sync, exceeding Apps Script
+            //     CacheService 5min TTL → corrupts upload mid-flight.
+            // Receipts only need ~1280px @ q0.8 → ~100-200KB → fast & reliable.
+            this._compressImage(ev.target.result, 1280, 0.8).then((compressed) => {
+                this.photoBase64 = compressed;
 
-            const preview = document.getElementById('photo-preview');
-            preview.src = this.photoBase64;
-            preview.classList.remove('hidden');
-            document.getElementById('upload-placeholder').classList.add('hidden');
-            document.getElementById('photo-analyze-btn').classList.remove('hidden');
+                const preview = document.getElementById('photo-preview');
+                preview.src = this.photoBase64;
+                preview.classList.remove('hidden');
+                document.getElementById('upload-placeholder').classList.add('hidden');
+                document.getElementById('photo-analyze-btn').classList.remove('hidden');
+            });
         };
         reader.readAsDataURL(file);
+    },
+
+    _compressImage(dataUrl, maxDim, quality) {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => {
+                let { width, height } = img;
+                if (width > maxDim || height > maxDim) {
+                    if (width >= height) {
+                        height = Math.round(height * (maxDim / width));
+                        width = maxDim;
+                    } else {
+                        width = Math.round(width * (maxDim / height));
+                        height = maxDim;
+                    }
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                resolve(canvas.toDataURL('image/jpeg', quality));
+            };
+            img.onerror = () => resolve(dataUrl); // fallback to original on error
+            img.src = dataUrl;
+        });
     },
 
     handleTextInput() {
@@ -914,7 +947,7 @@ const App = {
 
         // Show app version for debugging
         const versionEl = document.getElementById('app-version');
-        if (versionEl) versionEl.textContent = 'v22';
+        if (versionEl) versionEl.textContent = 'v23';
 
         // Theme toggle
         const currentTheme = localStorage.getItem('ec_theme') || 'dark';
