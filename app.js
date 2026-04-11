@@ -495,6 +495,11 @@ const App = {
 
                 this._addChatBubble(messages, 'ai', msg);
 
+                // Show AI message (questions, warnings, tips)
+                if (result.message) {
+                    this._addChatBubble(messages, 'ai', `💬 ${result.message}`);
+                }
+
                 // Fill form
                 if (result.desc)    document.getElementById('exp-desc').value    = result.desc;
                 if (result.amount)  document.getElementById('exp-amount').value  = result.amount;
