@@ -51,7 +51,7 @@ const App = {
         // Online/offline indicator
         window.addEventListener('online', () => {
             document.body.classList.remove('offline');
-            this._autoSync();
+            Sync.push().catch(e => console.warn('Sync:', e));
         });
         window.addEventListener('offline', () => document.body.classList.add('offline'));
         if (!navigator.onLine) document.body.classList.add('offline');
@@ -592,8 +592,12 @@ const App = {
             DB.saveExpense(expense);
             this._showToast('✅ 已儲存！');
 
-            // Trigger sync with feedback
-            this._autoSync();
+            // Direct sync - fire and forget
+            Sync.push().then(() => {
+                App._showToast('🔄 已同步');
+            }).catch(e => {
+                console.warn('Auto-sync error:', e);
+            });
 
             // Go back to dashboard
             setTimeout(() => this.showView('dashboard'), 600);
@@ -756,7 +760,7 @@ const App = {
                     _wasSynced: true,
                     syncedAt: null
                 });
-                this._autoSync();
+                Sync.push().catch(e => console.warn('Sync:', e));
                 modal.classList.add('hidden');
                 this._showToast('已更新');
                 this.loadRecords();
@@ -795,7 +799,7 @@ const App = {
     _bulkClaim() {
         try {
             this.selectedRecords.forEach(id => DB.updateExpenseStatus(id, 'claimed'));
-            this._autoSync();
+            Sync.push().catch(e => console.warn('Sync:', e));
             this._showToast(`✅ ${this.selectedRecords.size} 筆已標記為報銷`);
             this.selectedRecords.clear();
             this._renderRecordsList();
@@ -910,7 +914,7 @@ const App = {
 
         // Show app version for debugging
         const versionEl = document.getElementById('app-version');
-        if (versionEl) versionEl.textContent = 'v14';
+        if (versionEl) versionEl.textContent = 'v15';
 
         // Theme toggle
         const currentTheme = localStorage.getItem('ec_theme') || 'dark';
