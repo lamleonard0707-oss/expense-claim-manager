@@ -561,7 +561,7 @@ const App = {
             desc, amount, currency, date, payment, notes,
             photoBase64: this.photoBase64 || null,
             status: 'unclaimed',
-            createdAt: new Date().toISOString()
+            createdAt: App._hkNow()
         };
 
         try {
@@ -1040,6 +1040,13 @@ const App = {
         try {
             return JSON.parse(localStorage.getItem('ec_user'));
         } catch(e) { return null; }
+    },
+
+    _hkNow() {
+        // Return ISO string in HK timezone (UTC+8)
+        const now = new Date();
+        const hk = new Date(now.getTime() + (8 * 60 - now.getTimezoneOffset()) * 60000);
+        return hk.toISOString().replace('Z', '+08:00');
     },
 
     _showError(el, msg) {
