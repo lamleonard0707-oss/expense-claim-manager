@@ -38,7 +38,7 @@ const App = {
 
         // Register service worker
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js?v=17t1744349500').catch(() => {});
+            navigator.serviceWorker.register('sw.js?v=19t1775902549').catch(() => {});
         }
 
         // PWA install prompt
@@ -914,7 +914,7 @@ const App = {
 
         // Show app version for debugging
         const versionEl = document.getElementById('app-version');
-        if (versionEl) versionEl.textContent = 'v17';
+        if (versionEl) versionEl.textContent = 'v19';
 
         // Theme toggle
         const currentTheme = localStorage.getItem('ec_theme') || 'dark';
@@ -979,15 +979,29 @@ const App = {
             if (unsynced.length === 0) { logEl.textContent += '✅ 全部已同步\n'; return; }
 
             try {
-                // Use Sync.push() which handles both records AND photos
-                await Sync.push();
-                const remaining = DB.getUnsyncedExpenses().length;
-                logEl.textContent += `\n✅ 同步完成！剩餘未同步: ${remaining} 筆\n`;
-                if (remaining > 0) {
-                    logEl.textContent += '⚠️ 部分記錄同步失敗，請檢查網絡後重試\n';
+                // Test connection first so we get a clear diagnostic
+                logEl.textContent += '\n🔌 測試 Apps Script connection...\n';
+                const t = await Sync.testConnection();
+                if (!t.ok) {
+                    logEl.textContent += `❌ Connection 失敗: ${t.error}\n`;
+                    logEl.textContent += '\n⛔ 唔再試 sync record，先 fix 上面個 connection 問題。\n';
+                    return;
                 }
+                logEl.textContent += `✅ Connection OK\n回應: ${t.response}\n\n`;
+
+                // Use Sync.push() which handles both records AND photos
+                const result = await Sync.push();
+                logEl.textContent += `\n結果: 成功 ${result.synced} 筆，失敗 ${result.failed} 筆\n`;
+                if (result.errors && result.errors.length > 0) {
+                    logEl.textContent += '\n⚠️ 失敗原因:\n';
+                    result.errors.forEach(err => {
+                        logEl.textContent += `  ${err}\n`;
+                    });
+                }
+                const remaining = DB.getUnsyncedExpenses().length;
+                logEl.textContent += `\n剩餘未同步: ${remaining} 筆\n`;
             } catch (e) {
-                logEl.textContent += `\n❌ 同步失敗: ${e.message}\n`;
+                logEl.textContent += `\n❌ 同步失敗: ${e.name}: ${e.message}\n`;
             }
         };
 
