@@ -50,6 +50,24 @@ function handleRequest(data) {
         })).setMimeType(ContentService.MimeType.JSON);
     }
 
+    if (action === 'drive_check') {
+        // Test Drive folder access without doing any upload
+        try {
+            var folder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
+            return ContentService.createTextOutput(JSON.stringify({
+                success: true,
+                folderName: folder.getName(),
+                folderUrl: folder.getUrl(),
+                owner: folder.getOwner() ? folder.getOwner().getEmail() : '(no owner — shared drive)'
+            })).setMimeType(ContentService.MimeType.JSON);
+        } catch (err) {
+            return ContentService.createTextOutput(JSON.stringify({
+                success: false,
+                error: 'getFolderById(' + DRIVE_FOLDER_ID + '): ' + err.toString()
+            })).setMimeType(ContentService.MimeType.JSON);
+        }
+    }
+
     if (action === 'addRecord') {
         var result = addRecord(data.record, data.photo);
         return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
@@ -87,21 +105,29 @@ function handleRequest(data) {
                 var ck = 'photo_chunk_' + recordId + '_' + ci;
                 var chunkData = cache.get(ck);
                 if (!chunkData) {
-                    return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'Missing chunk ' + ci })).setMimeType(ContentService.MimeType.JSON);
+                    return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'Missing chunk ' + ci + ' (CacheService TTL 5min — too slow?)' })).setMimeType(ContentService.MimeType.JSON);
                 }
                 allChunks += chunkData;
                 cache.remove(ck);
             }
             var fullBase64 = 'data:image/jpeg;base64,' + allChunks;
-            var photoLink2 = uploadPhoto(fullBase64, data.record);
-            if (photoLink2) {
-                var ss2 = SpreadsheetApp.openById(SPREADSHEET_ID);
-                var found2 = findRecordById(ss2, data.record.id);
-                if (found2) {
-                    found2.sheet.getRange(found2.row, 11).setValue(photoLink2);
+            var photoResult = uploadPhotoWithDetail(fullBase64, data.record);
+            if (photoResult.url) {
+                try {
+                    var ss2 = SpreadsheetApp.openById(SPREADSHEET_ID);
+                    var found2 = findRecordById(ss2, data.record.id);
+                    if (found2) {
+                        found2.sheet.getRange(found2.row, 11).setValue(photoResult.url);
+                    } else {
+                        return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'photo uploaded but record row not found in sheet for id=' + data.record.id, driveLink: photoResult.url })).setMimeType(ContentService.MimeType.JSON);
+                    }
+                } catch (eSheet) {
+                    return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'photo uploaded but sheet update failed: ' + eSheet.toString(), driveLink: photoResult.url })).setMimeType(ContentService.MimeType.JSON);
                 }
+                return ContentService.createTextOutput(JSON.stringify({ success: true, driveLink: photoResult.url, assembledLen: allChunks.length })).setMimeType(ContentService.MimeType.JSON);
             }
-            return ContentService.createTextOutput(JSON.stringify({ success: true, driveLink: photoLink2 })).setMimeType(ContentService.MimeType.JSON);
+            // Photo upload failed — return the actual reason
+            return ContentService.createTextOutput(JSON.stringify({ success: false, error: photoResult.error || 'uploadPhoto returned empty URL with no error', assembledLen: allChunks.length })).setMimeType(ContentService.MimeType.JSON);
         }
 
         return ContentService.createTextOutput(JSON.stringify({ success: true, chunk: data.chunkIndex })).setMimeType(ContentService.MimeType.JSON);
@@ -395,38 +421,61 @@ function rebuildSubtotals(sheet) {
 // Google Drive Photo Upload
 // ============================================================
 
-function uploadPhoto(base64Data, record) {
+// Returns { url, error } so callers can surface the actual reason instead of swallowing.
+function uploadPhotoWithDetail(base64Data, record) {
     try {
-        var rootFolder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
+        var rootFolder;
+        try {
+            rootFolder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
+        } catch (e1) {
+            return { url: '', error: 'getFolderById(' + DRIVE_FOLDER_ID + '): ' + e1.toString() };
+        }
 
-        // Create project subfolder if not exists
         var projectName = record.project || '未分類';
         var projectFolder = getOrCreateSubfolder(rootFolder, projectName);
 
-        // Create month subfolder under project (e.g. "2026-04")
         var monthStr = record.paymentDate ? record.paymentDate.substring(0, 7) : getMonthTab();
         var monthFolder = getOrCreateSubfolder(projectFolder, monthStr);
 
-        // Strip data URL prefix if present
         var imageData = base64Data;
         if (base64Data.indexOf(',') !== -1) {
             imageData = base64Data.split(',')[1];
         }
 
-        var blob = Utilities.newBlob(
-            Utilities.base64Decode(imageData),
-            'image/jpeg',
-            buildPhotoFilename(record)
-        );
+        var bytes;
+        try {
+            bytes = Utilities.base64Decode(imageData);
+        } catch (e2) {
+            return { url: '', error: 'base64Decode failed (len=' + imageData.length + '): ' + e2.toString() };
+        }
 
-        var file = monthFolder.createFile(blob);
-        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+        var blob = Utilities.newBlob(bytes, 'image/jpeg', buildPhotoFilename(record));
 
-        return file.getUrl();
+        var file;
+        try {
+            file = monthFolder.createFile(blob);
+        } catch (e3) {
+            return { url: '', error: 'createFile failed: ' + e3.toString() };
+        }
+
+        try {
+            file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+        } catch (e4) {
+            // File created but sharing failed — still return URL with warning
+            return { url: file.getUrl(), error: 'sharing failed (file created): ' + e4.toString() };
+        }
+
+        return { url: file.getUrl(), error: null };
     } catch (err) {
         Logger.log('Photo upload failed: ' + err.toString());
-        return '';
+        return { url: '', error: err.toString() };
     }
+}
+
+// Backwards-compatible wrapper for any callers that just want the URL
+function uploadPhoto(base64Data, record) {
+    var result = uploadPhotoWithDetail(base64Data, record);
+    return result.url;
 }
 
 function getOrCreateSubfolder(parentFolder, folderName) {
