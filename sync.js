@@ -78,6 +78,9 @@ const Sync = {
 
     async _uploadPhoto(expense, projectName) {
         try {
+            // Compress image before upload to reduce payload size
+            const compressed = await this._compressPhoto(expense.photoBase64);
+
             const payload = {
                 action: 'uploadPhoto',
                 record: {
@@ -87,27 +90,38 @@ const Sync = {
                     currency: expense.currency,
                     paymentDate: expense.date
                 },
-                photo: expense.photoBase64
+                photo: compressed
             };
-            // Apps Script web app redirects POST to a different URL
-            // Must follow redirects properly — no-cors blocks this
-            const resp = await fetch(this.url, {
+            // Apps Script 302 redirects POST→GET, losing body.
+            // no-cors mode: body IS sent, server processes doPost, we just can't read response.
+            await fetch(this.url, {
                 method: 'POST',
-                redirect: 'follow',
+                mode: 'no-cors',
                 headers: { 'Content-Type': 'text/plain' },
                 body: JSON.stringify(payload)
             });
-            const text = await resp.text();
-            try {
-                const result = JSON.parse(text);
-                if (!result.success) {
-                    console.warn('Photo upload server error:', result.error);
-                }
-            } catch (e) {
-                console.warn('Photo upload response parse error:', text.substring(0, 200));
-            }
+            console.log('Photo upload sent for', expense.id);
         } catch (e) {
             console.warn('Photo upload failed:', e);
         }
+    },
+
+    async _compressPhoto(base64Data) {
+        // Compress to max 800px wide, 0.6 quality JPEG
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const maxW = 800;
+                let w = img.width, h = img.height;
+                if (w > maxW) { h = h * maxW / w; w = maxW; }
+                canvas.width = w;
+                canvas.height = h;
+                canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                resolve(canvas.toDataURL('image/jpeg', 0.6));
+            };
+            img.onerror = () => resolve(base64Data); // fallback to original
+            img.src = base64Data;
+        });
     }
 };
