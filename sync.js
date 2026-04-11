@@ -49,6 +49,18 @@ const Sync = {
                     const result = JSON.parse(text);
                     if (result.success) {
                         DB.markSynced(expense.id);
+                    } else if (isUpdate && result.error && result.error.includes('not found')) {
+                        // updateRecord failed (ID not in sheet yet) — retry as addRecord
+                        payload.action = 'addRecord';
+                        const retryEncoded = encodeURIComponent(JSON.stringify(payload));
+                        const retryResp = await fetch(this.url + '?data=' + retryEncoded, {
+                            method: 'GET', redirect: 'follow'
+                        });
+                        const retryText = await retryResp.text();
+                        try {
+                            const retryResult = JSON.parse(retryText);
+                            if (retryResult.success) DB.markSynced(expense.id);
+                        } catch (e2) {}
                     }
                 } catch (e) {
                     console.warn('Sync parse error:', text.substring(0, 200));
