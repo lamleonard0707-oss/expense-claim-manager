@@ -65,6 +65,15 @@ function handleRequest(data) {
 function addRecord(record, photoBase64) {
     var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
 
+    // Check if this record already exists (upsert logic)
+    var existing = findRecordById(ss, record.id);
+    if (existing) {
+        // Record exists — update status and claim date only
+        existing.sheet.getRange(existing.row, 9).setValue(record.claimStatus);
+        existing.sheet.getRange(existing.row, 10).setNumberFormat('@').setValue(formatHKDateTime(record.claimDate));
+        return { success: true, updated: true, row: existing.row, tab: existing.sheet.getName() };
+    }
+
     // Determine tab name from project + month (e.g. "Partyland MK - 2026-04")
     var monthStr = record.paymentDate ? record.paymentDate.substring(0, 7) : getMonthTab();
     var projectName = record.project || '未分類';
@@ -93,13 +102,17 @@ function addRecord(record, photoBase64) {
         record.paymentMethod,
         record.paidBy,
         record.claimStatus,
-        record.claimDate,
+        formatHKDateTime(record.claimDate),
         photoLink,
-        record.createdAt
+        formatHKDateTime(record.createdAt)
     ];
 
     var range = sheet.getRange(insertRow, 1, 1, row.length);
     range.setValues([row]);
+
+    // Force date columns as plain text to prevent timezone conversion
+    sheet.getRange(insertRow, 10).setNumberFormat('@'); // claimDate
+    sheet.getRange(insertRow, 12).setNumberFormat('@'); // createdAt
 
     // Format amount column (E) as number
     sheet.getRange(insertRow, 5).setNumberFormat('#,##0.00');
@@ -108,6 +121,24 @@ function addRecord(record, photoBase64) {
     rebuildSubtotals(sheet);
 
     return { success: true, row: insertRow, tab: tabName };
+}
+
+// Search all sheets for a record by ID
+function findRecordById(ss, recordId) {
+    var sheets = ss.getSheets();
+    for (var s = 0; s < sheets.length; s++) {
+        var sheet = sheets[s];
+        var lastRow = sheet.getLastRow();
+        if (lastRow < 2) continue;
+
+        var ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+        for (var r = 0; r < ids.length; r++) {
+            if (String(ids[r][0]) === String(recordId)) {
+                return { sheet: sheet, row: r + 2 };
+            }
+        }
+    }
+    return null;
 }
 
 // ============================================================
@@ -130,7 +161,7 @@ function updateRecord(record) {
                 var rowNum = r + 2;
                 // Update status (col 9) and claim date (col 10)
                 sheet.getRange(rowNum, 9).setValue(record.claimStatus);
-                sheet.getRange(rowNum, 10).setValue(record.claimDate || '');
+                sheet.getRange(rowNum, 10).setNumberFormat('@').setValue(formatHKDateTime(record.claimDate));
                 return { success: true, updated: true, tab: sheet.getName(), row: rowNum };
             }
         }
@@ -142,6 +173,18 @@ function updateRecord(record) {
 // ============================================================
 // Sheet Helpers
 // ============================================================
+
+// Convert ISO datetime to readable HK time string (prevents Sheets auto-timezone conversion)
+function formatHKDateTime(isoStr) {
+    if (!isoStr) return '';
+    try {
+        var d = new Date(isoStr);
+        if (isNaN(d.getTime())) return isoStr; // Not a valid date, return as-is
+        return Utilities.formatDate(d, 'Asia/Hong_Kong', 'yyyy-MM-dd HH:mm:ss');
+    } catch (e) {
+        return isoStr;
+    }
+}
 
 function getMonthTab() {
     // Force Hong Kong timezone (UTC+8)
