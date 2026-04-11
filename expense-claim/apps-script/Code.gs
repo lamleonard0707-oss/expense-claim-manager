@@ -73,6 +73,29 @@ function handleRequest(data) {
         return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
     }
 
+    if (action === 'getRecord') {
+        // Verification endpoint for the PWA's POST + verify sync pattern.
+        // Client POSTs addRecord (no-cors fire-and-forget) then polls this
+        // until the row exists and (if a photo was sent) col 11 has a Drive URL.
+        var ssGet = SpreadsheetApp.openById(SPREADSHEET_ID);
+        var foundGet = findRecordById(ssGet, data.id);
+        if (!foundGet) {
+            return ContentService.createTextOutput(JSON.stringify({
+                success: true, found: false
+            })).setMimeType(ContentService.MimeType.JSON);
+        }
+        var photoUrlGet = foundGet.sheet.getRange(foundGet.row, 11).getValue();
+        var hasPhoto = !!(photoUrlGet && String(photoUrlGet).indexOf('drive.google.com') !== -1);
+        return ContentService.createTextOutput(JSON.stringify({
+            success: true,
+            found: true,
+            tab: foundGet.sheet.getName(),
+            row: foundGet.row,
+            photoUrl: hasPhoto ? photoUrlGet : '',
+            hasPhoto: hasPhoto
+        })).setMimeType(ContentService.MimeType.JSON);
+    }
+
     if (action === 'updateRecord') {
         var updateResult = updateRecord(data.record);
         return ContentService.createTextOutput(JSON.stringify(updateResult)).setMimeType(ContentService.MimeType.JSON);
@@ -185,10 +208,32 @@ function addRecord(record, photoBase64) {
     // Check if this record already exists (upsert logic)
     var existing = findRecordById(ss, record.id);
     if (existing) {
-        // Record exists — update status and claim date only
+        // Record exists — update status and claim date.
         existing.sheet.getRange(existing.row, 9).setValue(record.claimStatus);
         existing.sheet.getRange(existing.row, 10).setNumberFormat('@').setValue(formatHKDateTime(record.claimDate));
-        return { success: true, updated: true, row: existing.row, tab: existing.sheet.getName() };
+        // Idempotent retry: if a photo was sent and col 11 is still empty
+        // (e.g. previous attempt inserted the row but failed mid-upload),
+        // upload the photo now and fill it in. This is what makes the PWA's
+        // "leave it unsynced and retry next time" strategy actually work.
+        var photoLinkUpsert = '';
+        if (photoBase64) {
+            var existingPhoto = existing.sheet.getRange(existing.row, 11).getValue();
+            if (!existingPhoto || String(existingPhoto).indexOf('drive.google.com') === -1) {
+                photoLinkUpsert = uploadPhoto(photoBase64, record);
+                if (photoLinkUpsert) {
+                    existing.sheet.getRange(existing.row, 11).setValue(photoLinkUpsert);
+                }
+            } else {
+                photoLinkUpsert = existingPhoto;
+            }
+        }
+        return {
+            success: true,
+            updated: true,
+            row: existing.row,
+            tab: existing.sheet.getName(),
+            driveLink: photoLinkUpsert
+        };
     }
 
     // Determine tab name from project + month (e.g. "Partyland MK - 2026-04")
