@@ -947,7 +947,7 @@ const App = {
 
         // Show app version for debugging
         const versionEl = document.getElementById('app-version');
-        if (versionEl) versionEl.textContent = 'v23';
+        if (versionEl) versionEl.textContent = 'v24';
 
         // Theme toggle
         const currentTheme = localStorage.getItem('ec_theme') || 'dark';
@@ -1022,8 +1022,15 @@ const App = {
                 }
                 logEl.textContent += `✅ Connection OK\n回應: ${t.response}\n\n`;
 
-                // Use Sync.push() which handles both records AND photos
-                const result = await Sync.push();
+                // Use Sync.push() which handles both records AND photos.
+                // Pass onProgress so chunked photo upload prints chunk-by-chunk progress
+                // — without this we can't see whether a long upload is alive or hung.
+                const result = await Sync.push({
+                    onProgress: (msg) => {
+                        logEl.textContent += `  ${msg}\n`;
+                        logEl.scrollTop = logEl.scrollHeight;
+                    }
+                });
                 logEl.textContent += `\n結果: 成功 ${result.synced} 筆，失敗 ${result.failed} 筆\n`;
                 if (result.errors && result.errors.length > 0) {
                     logEl.textContent += '\n⚠️ 失敗原因:\n';
