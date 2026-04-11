@@ -51,7 +51,7 @@ const App = {
         // Online/offline indicator
         window.addEventListener('online', () => {
             document.body.classList.remove('offline');
-            try { Sync.push(); } catch(e) {}
+            this._autoSync();
         });
         window.addEventListener('offline', () => document.body.classList.add('offline'));
         if (!navigator.onLine) document.body.classList.add('offline');
@@ -592,13 +592,22 @@ const App = {
             DB.saveExpense(expense);
             this._showToast('✅ 已儲存！');
 
-            // Trigger sync (best-effort)
-            try { Sync.push(); } catch(e) {}
+            // Trigger sync with feedback
+            this._autoSync();
 
             // Go back to dashboard
             setTimeout(() => this.showView('dashboard'), 600);
         } catch (e) {
             this._showError(document.getElementById('add-error'), `儲存失敗：${e.message}`);
+        }
+    },
+
+    async _autoSync() {
+        if (!navigator.onLine) return;
+        try {
+            await Sync.push();
+        } catch (e) {
+            console.warn('Auto-sync failed:', e);
         }
     },
 
@@ -742,7 +751,7 @@ const App = {
                     _wasSynced: true,
                     syncedAt: null
                 });
-                try { Sync.push(); } catch(e) {}
+                this._autoSync();
                 modal.classList.add('hidden');
                 this._showToast('已更新');
                 this.loadRecords();
@@ -781,7 +790,7 @@ const App = {
     _bulkClaim() {
         try {
             this.selectedRecords.forEach(id => DB.updateExpenseStatus(id, 'claimed'));
-            try { Sync.push(); } catch(e) {}
+            this._autoSync();
             this._showToast(`✅ ${this.selectedRecords.size} 筆已標記為報銷`);
             this.selectedRecords.clear();
             this._renderRecordsList();
