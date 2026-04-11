@@ -122,8 +122,10 @@ const DB = {
 
     _hkNow() {
         const now = new Date();
-        const hk = new Date(now.getTime() + (8 * 60 - now.getTimezoneOffset()) * 60000);
-        return hk.toISOString().replace('Z', '+08:00');
+        const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+        const hk = new Date(utc + 8 * 3600000);
+        const p = n => String(n).padStart(2, '0');
+        return `${hk.getFullYear()}-${p(hk.getMonth()+1)}-${p(hk.getDate())} ${p(hk.getHours())}:${p(hk.getMinutes())}:${p(hk.getSeconds())}`;
     },
 
     updateExpenseStatus(id, status) {
