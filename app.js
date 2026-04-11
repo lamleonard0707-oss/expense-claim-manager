@@ -615,6 +615,9 @@ const App = {
         // Populate project filter
         this._populateProjectFilter('rec-filter-project');
 
+        // Default to showing unclaimed only
+        document.getElementById('rec-filter-status').value = 'unclaimed';
+
         document.getElementById('rec-filter-project').onchange = () => this._renderRecordsList();
         document.getElementById('rec-filter-status').onchange  = () => this._renderRecordsList();
 
