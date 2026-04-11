@@ -605,9 +605,14 @@ const App = {
     async _autoSync() {
         if (!navigator.onLine) return;
         try {
+            const before = DB.getUnsyncedExpenses().length;
+            if (before === 0) return;
             await Sync.push();
+            const after = DB.getUnsyncedExpenses().length;
+            this._showToast(`🔄 已同步 ${before - after} 筆`);
         } catch (e) {
             console.warn('Auto-sync failed:', e);
+            this._showToast('⚠️ 同步失敗');
         }
     },
 
@@ -905,7 +910,7 @@ const App = {
 
         // Show app version for debugging
         const versionEl = document.getElementById('app-version');
-        if (versionEl) versionEl.textContent = 'v13';
+        if (versionEl) versionEl.textContent = 'v14';
 
         // Theme toggle
         const currentTheme = localStorage.getItem('ec_theme') || 'dark';
@@ -963,60 +968,23 @@ const App = {
 
             const unsynced = DB.getUnsyncedExpenses();
             logEl.textContent += `未同步記錄: ${unsynced.length} 筆\n`;
+            for (const exp of unsynced) {
+                logEl.textContent += `  [${exp.id}] ${exp.desc} | photo: ${exp.photoBase64 ? exp.photoBase64.length + ' chars' : 'none'}\n`;
+            }
 
             if (unsynced.length === 0) { logEl.textContent += '✅ 全部已同步\n'; return; }
 
-            const projects = DB.getAllProjects();
-            const projectMap = {};
-            projects.forEach(p => { projectMap[p.id] = p.name; });
-
-            for (const exp of unsynced) {
-                const isUpdate = exp._wasSynced;
-                const action = isUpdate ? 'updateRecord' : 'addRecord';
-                logEl.textContent += `\n[${exp.id}] ${exp.desc} — ${action}\n`;
-                logEl.textContent += `  status=${exp.status}, _wasSynced=${exp._wasSynced}\n`;
-
-                const payload = {
-                    action,
-                    record: {
-                        id: exp.id,
-                        project: projectMap[exp.projectId] || '未分類',
-                        amount: exp.amount,
-                        currency: exp.currency,
-                        description: exp.desc,
-                        paymentDate: exp.date,
-                        paymentMethod: exp.payment,
-                        paidBy: JSON.parse(localStorage.getItem('ec_user') || '{}').name || '未知',
-                        claimStatus: exp.status,
-                        claimDate: exp.claimDate || '',
-                        notes: exp.notes || '',
-                        createdAt: exp.createdAt
-                    },
-                    photo: null
-                };
-
-                try {
-                    const encoded = encodeURIComponent(JSON.stringify(payload));
-                    logEl.textContent += `  payload size: ${encoded.length} chars\n`;
-                    const resp = await fetch(url + '?data=' + encoded, { method: 'GET', redirect: 'follow' });
-                    const text = await resp.text();
-                    logEl.textContent += `  response: ${text.substring(0, 200)}\n`;
-                    try {
-                        const result = JSON.parse(text);
-                        if (result.success) {
-                            DB.markSynced(exp.id);
-                            logEl.textContent += `  ✅ 同步成功\n`;
-                        } else {
-                            logEl.textContent += `  ❌ ${result.error}\n`;
-                        }
-                    } catch (e) {
-                        logEl.textContent += `  ⚠️ parse error\n`;
-                    }
-                } catch (e) {
-                    logEl.textContent += `  ❌ fetch error: ${e.message}\n`;
+            try {
+                // Use Sync.push() which handles both records AND photos
+                await Sync.push();
+                const remaining = DB.getUnsyncedExpenses().length;
+                logEl.textContent += `\n✅ 同步完成！剩餘未同步: ${remaining} 筆\n`;
+                if (remaining > 0) {
+                    logEl.textContent += '⚠️ 部分記錄同步失敗，請檢查網絡後重試\n';
                 }
+            } catch (e) {
+                logEl.textContent += `\n❌ 同步失敗: ${e.message}\n`;
             }
-            logEl.textContent += '\n同步完成！';
         };
 
         // Reminder hour
