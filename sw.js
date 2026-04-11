@@ -1,4 +1,4 @@
-const CACHE_NAME = 'expense-claim-v12';
+const CACHE_NAME = 'expense-claim-v13';
 const ASSETS = ['/', 'index.html', 'style.css', 'app.js', 'db.js', 'ai.js', 'sync.js', 'manifest.json'];
 
 self.addEventListener('install', e => {
