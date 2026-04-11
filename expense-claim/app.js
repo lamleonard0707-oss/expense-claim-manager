@@ -38,7 +38,7 @@ const App = {
 
         // Register service worker
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js?v=16').catch(() => {});
+            navigator.serviceWorker.register('sw.js?v=17t1744349500').catch(() => {});
         }
 
         // PWA install prompt
@@ -914,7 +914,7 @@ const App = {
 
         // Show app version for debugging
         const versionEl = document.getElementById('app-version');
-        if (versionEl) versionEl.textContent = 'v16';
+        if (versionEl) versionEl.textContent = 'v17';
 
         // Theme toggle
         const currentTheme = localStorage.getItem('ec_theme') || 'dark';
