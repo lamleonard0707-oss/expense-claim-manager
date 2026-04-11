@@ -68,7 +68,10 @@ const Sync = {
 
                 // Upload photo separately if exists
                 if (expense.photoBase64) {
+                    console.log('Photo found for', expense.id, '- size:', expense.photoBase64.length);
                     await this._uploadPhoto(expense, projectMap[expense.projectId] || '未分類');
+                } else {
+                    console.log('No photo for', expense.id);
                 }
             } catch (e) {
                 console.warn('Sync failed for', expense.id, e);
@@ -94,15 +97,17 @@ const Sync = {
             };
 
             const jsonStr = JSON.stringify(payload);
+            console.log('Photo payload size:', jsonStr.length, 'compressed photo size:', compressed.length);
 
             // If small enough for GET URL (< 7000 chars encoded), use reliable GET
             const encoded = encodeURIComponent(jsonStr);
+            console.log('Photo encoded URL size:', encoded.length);
             if (encoded.length < 7000) {
                 const resp = await fetch(this.url + '?data=' + encoded, {
                     method: 'GET', redirect: 'follow'
                 });
                 const text = await resp.text();
-                console.log('Photo upload (GET):', text.substring(0, 200));
+                console.log('Photo upload (GET) response:', text.substring(0, 200));
             } else {
                 // Too large for GET — split into chunks via multiple GETs
                 const base64Only = compressed.split(',')[1] || compressed;
