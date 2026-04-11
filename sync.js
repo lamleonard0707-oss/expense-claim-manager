@@ -14,8 +14,13 @@ const Sync = {
 
         for (const expense of unsynced) {
             try {
+                // If this expense was previously synced (has a prior syncedAt record),
+                // it means only status changed — use updateRecord instead of addRecord
+                const isUpdate = expense._wasSynced;
+                const action = isUpdate ? 'updateRecord' : 'addRecord';
+
                 const payload = {
-                    action: 'addRecord',
+                    action,
                     record: {
                         id: expense.id,
                         project: projectMap[expense.projectId] || '未分類',
@@ -72,12 +77,23 @@ const Sync = {
                 },
                 photo: expense.photoBase64
             };
-            // Photos must use POST due to size
-            await fetch(this.url, {
+            // Apps Script web app redirects POST to a different URL
+            // Must follow redirects properly — no-cors blocks this
+            const resp = await fetch(this.url, {
                 method: 'POST',
-                mode: 'no-cors',
+                redirect: 'follow',
+                headers: { 'Content-Type': 'text/plain' },
                 body: JSON.stringify(payload)
             });
+            const text = await resp.text();
+            try {
+                const result = JSON.parse(text);
+                if (!result.success) {
+                    console.warn('Photo upload server error:', result.error);
+                }
+            } catch (e) {
+                console.warn('Photo upload response parse error:', text.substring(0, 200));
+            }
         } catch (e) {
             console.warn('Photo upload failed:', e);
         }
