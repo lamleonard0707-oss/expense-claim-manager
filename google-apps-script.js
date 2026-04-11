@@ -52,6 +52,14 @@ function handleRequest(data) {
 
     if (action === 'uploadPhoto') {
         var photoLink = uploadPhoto(data.photo, data.record);
+        // Update the sheet row with the Drive link (col 11 = 單據)
+        if (photoLink) {
+            var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+            var found = findRecordById(ss, data.record.id);
+            if (found) {
+                found.sheet.getRange(found.row, 11).setValue(photoLink);
+            }
+        }
         return ContentService.createTextOutput(JSON.stringify({ success: true, driveLink: photoLink })).setMimeType(ContentService.MimeType.JSON);
     }
 
