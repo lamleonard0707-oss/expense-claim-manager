@@ -940,6 +940,72 @@ const App = {
             try { Sync.setUrl(url); } catch(e) {}
         };
 
+        // Manual sync with logging
+        document.getElementById('settings-manual-sync').onclick = async () => {
+            const logEl = document.getElementById('sync-log');
+            logEl.textContent = '開始同步...\n';
+            const url = Sync.url;
+            if (!url) { logEl.textContent += '❌ 未設定 Apps Script URL\n'; return; }
+            logEl.textContent += `URL: ${url.substring(0, 50)}...\n`;
+
+            const unsynced = DB.getUnsyncedExpenses();
+            logEl.textContent += `未同步記錄: ${unsynced.length} 筆\n`;
+
+            if (unsynced.length === 0) { logEl.textContent += '✅ 全部已同步\n'; return; }
+
+            const projects = DB.getAllProjects();
+            const projectMap = {};
+            projects.forEach(p => { projectMap[p.id] = p.name; });
+
+            for (const exp of unsynced) {
+                const isUpdate = exp._wasSynced;
+                const action = isUpdate ? 'updateRecord' : 'addRecord';
+                logEl.textContent += `\n[${exp.id}] ${exp.desc} — ${action}\n`;
+                logEl.textContent += `  status=${exp.status}, _wasSynced=${exp._wasSynced}\n`;
+
+                const payload = {
+                    action,
+                    record: {
+                        id: exp.id,
+                        project: projectMap[exp.projectId] || '未分類',
+                        amount: exp.amount,
+                        currency: exp.currency,
+                        description: exp.desc,
+                        paymentDate: exp.date,
+                        paymentMethod: exp.payment,
+                        paidBy: JSON.parse(localStorage.getItem('ec_user') || '{}').name || '未知',
+                        claimStatus: exp.status,
+                        claimDate: exp.claimDate || '',
+                        notes: exp.notes || '',
+                        createdAt: exp.createdAt
+                    },
+                    photo: null
+                };
+
+                try {
+                    const encoded = encodeURIComponent(JSON.stringify(payload));
+                    logEl.textContent += `  payload size: ${encoded.length} chars\n`;
+                    const resp = await fetch(url + '?data=' + encoded, { method: 'GET', redirect: 'follow' });
+                    const text = await resp.text();
+                    logEl.textContent += `  response: ${text.substring(0, 200)}\n`;
+                    try {
+                        const result = JSON.parse(text);
+                        if (result.success) {
+                            DB.markSynced(exp.id);
+                            logEl.textContent += `  ✅ 同步成功\n`;
+                        } else {
+                            logEl.textContent += `  ❌ ${result.error}\n`;
+                        }
+                    } catch (e) {
+                        logEl.textContent += `  ⚠️ parse error\n`;
+                    }
+                } catch (e) {
+                    logEl.textContent += `  ❌ fetch error: ${e.message}\n`;
+                }
+            }
+            logEl.textContent += '\n同步完成！';
+        };
+
         // Reminder hour
         const reminderHourEl = document.getElementById('settings-reminder-hour');
         reminderHourEl.value = localStorage.getItem('ec_reminder_hour') || '21';
