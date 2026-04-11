@@ -1,4 +1,4 @@
-const CACHE_NAME = 'expense-claim-v21';
+const CACHE_NAME = 'expense-claim-v22';
 const ASSETS = ['/', 'index.html', 'style.css', 'app.js', 'db.js', 'ai.js', 'sync.js', 'manifest.json'];
 
 self.addEventListener('install', e => {
@@ -15,6 +15,14 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
+    // Skip SW interception for cross-origin requests so they go directly to network
+    // (e.g. fetches to script.google.com for Apps Script sync). Otherwise the SW's
+    // fetch+catch wrapper can break cross-origin GET with very long URLs and surface
+    // as "TypeError: Failed to fetch" in the page.
+    const url = new URL(e.request.url);
+    if (url.origin !== self.location.origin) {
+        return; // let browser handle natively
+    }
     e.respondWith(
         fetch(e.request).catch(() => caches.match(e.request))
     );
