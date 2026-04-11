@@ -439,10 +439,10 @@ const App = {
         reader.onload = (ev) => {
             // Compress before storing — phone photos are 2-5MB which:
             // (a) blow past localStorage 5MB quota
-            // (b) require 100s of chunked GETs to sync, exceeding Apps Script
-            //     CacheService 5min TTL → corrupts upload mid-flight.
-            // Receipts only need ~1280px @ q0.8 → ~100-200KB → fast & reliable.
-            this._compressImage(ev.target.result, 1280, 0.8).then((compressed) => {
+            // (b) make the no-cors POST + verify cycle slow (Drive upload time
+            //     scales with payload). Receipts are perfectly readable at
+            //     1024px @ q0.7 → ~60-120KB → fast upload, fast verify.
+            this._compressImage(ev.target.result, 1024, 0.7).then((compressed) => {
                 this.photoBase64 = compressed;
 
                 const preview = document.getElementById('photo-preview');
@@ -947,7 +947,7 @@ const App = {
 
         // Show app version for debugging
         const versionEl = document.getElementById('app-version');
-        if (versionEl) versionEl.textContent = 'v24';
+        if (versionEl) versionEl.textContent = 'v26';
 
         // Theme toggle
         const currentTheme = localStorage.getItem('ec_theme') || 'dark';
