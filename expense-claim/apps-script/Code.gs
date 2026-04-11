@@ -99,13 +99,52 @@ function handleRequest(data) {
         cache.put(cacheKey, data.chunk, 21600); // 6h TTL — safety net for slow uploads
 
         if (data.chunkIndex === data.totalChunks - 1) {
+            // ─── Idempotency check ──────────────────────────────────────────────
+            // Apps Script web apps can be re-invoked when the front-end proxy
+            // times out on a long-running last-chunk request (Drive upload +
+            // sheet write can take 20-40s on big photos). The first invocation
+            // completes successfully (Drive uploaded + sheet updated) but cleans
+            // up cache chunks via cache.remove(). On the duplicate invocation,
+            // chunks 0..N-2 are already gone → the assemble loop returns
+            // "Missing chunk 0" → client reports a false failure even though
+            // the photo is already in Drive and the sheet row already has the
+            // Drive URL. Verified end-to-end: PWA showed "chunk N/M 失敗:
+            // Missing chunk 0" but the photo was found in Drive afterward.
+            //
+            // Fix: before reading any chunks, check whether the sheet row
+            // already has a Drive URL in column 11 for this record. If yes,
+            // this is a duplicate retry — return cached success and avoid
+            // re-processing.
+            try {
+                var ssIdem = SpreadsheetApp.openById(SPREADSHEET_ID);
+                var foundIdem = findRecordById(ssIdem, recordId);
+                if (foundIdem) {
+                    var existingUrl = foundIdem.sheet.getRange(foundIdem.row, 11).getValue();
+                    if (existingUrl && String(existingUrl).indexOf('drive.google.com') !== -1) {
+                        // Previous invocation already finished. Clean up leftover chunks.
+                        for (var ckIdem = 0; ckIdem < data.totalChunks; ckIdem++) {
+                            cache.remove('photo_chunk_' + recordId + '_' + ckIdem);
+                        }
+                        return ContentService.createTextOutput(JSON.stringify({
+                            success: true,
+                            driveLink: existingUrl,
+                            idempotent: true,
+                            note: 'previous invocation already uploaded photo'
+                        })).setMimeType(ContentService.MimeType.JSON);
+                    }
+                }
+            } catch (eIdem) {
+                // Idempotency check failed (sheet read error etc) — fall through
+                // to normal assembly path so we still attempt the upload.
+            }
+
             // Last chunk — assemble all chunks
             var allChunks = '';
             for (var ci = 0; ci < data.totalChunks; ci++) {
                 var ck = 'photo_chunk_' + recordId + '_' + ci;
                 var chunkData = cache.get(ck);
                 if (!chunkData) {
-                    return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'Missing chunk ' + ci + ' (CacheService TTL 5min — too slow?)' })).setMimeType(ContentService.MimeType.JSON);
+                    return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'Missing chunk ' + ci + '/' + data.totalChunks + ' — likely a duplicate invocation but sheet row has no Drive URL (idempotency check missed)' })).setMimeType(ContentService.MimeType.JSON);
                 }
                 allChunks += chunkData;
                 cache.remove(ck);
