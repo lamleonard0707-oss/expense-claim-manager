@@ -21,6 +21,24 @@
     --shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
 }
 
+/* Light theme override — activated by [data-theme="light"] on <html> */
+:root[data-theme="light"] {
+    --bg: #f5f5f7;
+    --surface: #ffffff;
+    --surface2: #ebedf2;
+    --text: #1a1a2e;
+    --text-dim: #6b7280;
+    --accent: #e94560;
+    --accent-dim: rgba(233, 69, 96, 0.10);
+    --success: #15a589;
+    --success-dim: rgba(46, 196, 182, 0.12);
+    --warning: #b7791f;
+    --warning-dim: rgba(247, 220, 111, 0.20);
+    --danger: #d64545;
+    --border: rgba(0, 0, 0, 0.12);
+    --shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+}
+
 /* ===================== RESET & BASE ===================== */
 * {
     box-sizing: border-box;
