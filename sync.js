@@ -78,7 +78,7 @@ const Sync = {
 
     async _uploadPhoto(expense, projectName) {
         try {
-            // Compress image before upload to reduce payload size
+            // Compress image aggressively for GET URL transport
             const compressed = await this._compressPhoto(expense.photoBase64);
 
             const payload = {
@@ -92,35 +92,62 @@ const Sync = {
                 },
                 photo: compressed
             };
-            // Apps Script 302 redirects POST→GET, losing body.
-            // no-cors mode: body IS sent, server processes doPost, we just can't read response.
-            await fetch(this.url, {
-                method: 'POST',
-                mode: 'no-cors',
-                headers: { 'Content-Type': 'text/plain' },
-                body: JSON.stringify(payload)
-            });
-            console.log('Photo upload sent for', expense.id);
+
+            const jsonStr = JSON.stringify(payload);
+
+            // If small enough for GET URL (< 7000 chars encoded), use reliable GET
+            const encoded = encodeURIComponent(jsonStr);
+            if (encoded.length < 7000) {
+                const resp = await fetch(this.url + '?data=' + encoded, {
+                    method: 'GET', redirect: 'follow'
+                });
+                const text = await resp.text();
+                console.log('Photo upload (GET):', text.substring(0, 200));
+            } else {
+                // Too large for GET — split into chunks via multiple GETs
+                const base64Only = compressed.split(',')[1] || compressed;
+                const chunkSize = 4000;
+                const chunks = [];
+                for (let i = 0; i < base64Only.length; i += chunkSize) {
+                    chunks.push(base64Only.substring(i, i + chunkSize));
+                }
+
+                for (let i = 0; i < chunks.length; i++) {
+                    const chunkPayload = {
+                        action: 'uploadPhotoChunk',
+                        record: payload.record,
+                        chunk: chunks[i],
+                        chunkIndex: i,
+                        totalChunks: chunks.length
+                    };
+                    const chunkEncoded = encodeURIComponent(JSON.stringify(chunkPayload));
+                    const resp = await fetch(this.url + '?data=' + chunkEncoded, {
+                        method: 'GET', redirect: 'follow'
+                    });
+                    const text = await resp.text();
+                    console.log(`Photo chunk ${i+1}/${chunks.length}:`, text.substring(0, 100));
+                }
+            }
         } catch (e) {
             console.warn('Photo upload failed:', e);
         }
     },
 
     async _compressPhoto(base64Data) {
-        // Compress to max 800px wide, 0.6 quality JPEG
+        // Compress to max 600px wide, 0.4 quality JPEG for URL transport
         return new Promise((resolve) => {
             const img = new Image();
             img.onload = () => {
                 const canvas = document.createElement('canvas');
-                const maxW = 800;
+                const maxW = 600;
                 let w = img.width, h = img.height;
                 if (w > maxW) { h = h * maxW / w; w = maxW; }
                 canvas.width = w;
                 canvas.height = h;
                 canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-                resolve(canvas.toDataURL('image/jpeg', 0.6));
+                resolve(canvas.toDataURL('image/jpeg', 0.4));
             };
-            img.onerror = () => resolve(base64Data); // fallback to original
+            img.onerror = () => resolve(base64Data);
             img.src = base64Data;
         });
     }
