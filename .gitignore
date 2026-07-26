@@ -46,3 +46,7 @@ __pycache__/
 
 # Node modules
 node_modules/
+# 私人 harness 設定 — 含家人資料，唔好 commit（2026-07-26 洩漏過一次）
+CLAUDE.md
+.claude/
+.telegram_bot/
